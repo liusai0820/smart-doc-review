@@ -1,15 +1,221 @@
 import { Document, Paragraph, ChangeType, ChangeSeverity } from "./mock-data";
-import { generateReviewPrompt } from "./prompts/review-prompt";
+import { generateEnhancedReviewPrompt } from "./prompts/enhanced-review-prompt";
 
-// OpenRouter API 接口
-interface OpenRouterResponse {
-  choices: {
-    message: {
-      content: string;
-    };
-  }[];
-  error?: {
-    message: string;
+/**
+ * 更健壮的JSON解析函数，处理LLM返回的可能格式不正确的JSON
+ */
+function parseRobustJSON(jsonString: string): ReviewResult {
+  // 打印原始输入以便调试
+  console.log('待解析的JSON字符串:', jsonString);
+
+  // 如果输入为空，返回默认结果
+  if (!jsonString) {
+    console.error('输入的JSON字符串为空');
+    return createDefaultResult();
+  }
+
+  try {
+    // 预处理 - 处理转义字符
+    let processedString = jsonString;
+    
+    // 如果整个字符串被引号包围，去除外层引号
+    if (processedString.startsWith('"') && processedString.endsWith('"')) {
+      try {
+        // 先解析外层字符串
+        processedString = JSON.parse(processedString);
+      } catch (e) {
+        console.error('解析外层字符串失败:', e);
+      }
+    }
+
+    // 查找第一个 { 和最后一个 } 的位置
+    let startIdx = processedString.indexOf('{');
+    let endIdx = processedString.lastIndexOf('}');
+    
+    if (startIdx === -1 || endIdx === -1) {
+      console.error('JSON字符串中没有找到有效的对象标记');
+      return createDefaultResult();
+    }
+
+    // 提取JSON对象部分
+    processedString = processedString.substring(startIdx, endIdx + 1);
+
+    // 第一阶段：修复转义字符
+    processedString = processedString
+      // 处理错误的转义
+      .replace(/\\\\/g, '\\')
+      .replace(/\\"/g, '"')
+      .replace(/\\'/g, "'")
+      // 处理Unicode转义
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, code) => 
+        String.fromCharCode(parseInt(code, 16))
+      );
+
+    // 第二阶段：标准化JSON格式
+    processedString = processedString
+      // 处理引号
+      .replace(/[""]/g, '"')
+      .replace(/['']/g, '"')
+      // 处理空白字符
+      .replace(/[\n\r\t]/g, ' ')
+      .replace(/\s+/g, ' ')
+      // 确保属性名有引号
+      .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+
+    // 第三阶段：修复值格式
+    processedString = processedString
+      // 处理未加引号的字符串值
+      .replace(/:\s*([^",\s\][{}][^,}]*[^",\s\][{}])/g, ':"$1"')
+      // 处理数字
+      .replace(/:(\s*-?\d+\.?\d*\s*)([,}])/g, ':$1$2')
+      // 处理布尔值和null
+      .replace(/:\s*true\b/gi, ':true')
+      .replace(/:\s*false\b/gi, ':false')
+      .replace(/:\s*null\b/gi, ':null');
+
+    // 第四阶段：修复结构问题
+    processedString = processedString
+      // 修复多余的逗号
+      .replace(/,\s*([}\]])/g, '$1')
+      // 修复缺少的逗号
+      .replace(/}(\s*){/g, '},{')
+      .replace(/](\s*)\[/g, '],[')
+      .replace(/"([^"]+)"\s*"([^"]+)"/g, '"$1","$2"');
+
+    console.log('清理后的JSON字符串:', processedString);
+
+    try {
+      // 尝试解析
+      const parsed = JSON.parse(processedString);
+      console.log('初步解析结果:', parsed);
+      
+      // 验证并规范化结果
+      const result = normalizeResult(parsed);
+      
+      if (!validateResult(result)) {
+        console.error('解析结果不符合预期结构');
+        return createDefaultResult();
+      }
+
+      return result;
+    } catch (parseError) {
+      console.error('JSON解析失败，错误信息:', parseError);
+      
+      // 最后尝试：直接解析原始字符串
+      try {
+        const parsed = JSON.parse(jsonString);
+        const result = normalizeResult(parsed);
+        
+        if (!validateResult(result)) {
+          return createDefaultResult();
+        }
+        
+        return result;
+      } catch (finalError) {
+        console.error('最终解析尝试失败:', finalError);
+        return createDefaultResult();
+      }
+    }
+  } catch (error) {
+    console.error('JSON处理失败:', error);
+    return createDefaultResult();
+  }
+}
+
+/**
+ * 规范化解析结果
+ */
+function normalizeResult(parsed: unknown): ReviewResult {
+  const safeParsed = parsed as Partial<ReviewResult>;
+  
+  // 确保基本结构存在
+  const result: ReviewResult = {
+    documentInfo: {
+      title: typeof safeParsed?.documentInfo?.title === 'string' 
+        ? safeParsed.documentInfo.title 
+        : '未知标题',
+      overview: typeof safeParsed?.documentInfo?.overview === 'string'
+        ? safeParsed.documentInfo.overview
+        : '无概述',
+      totalIssues: {
+        errors: Number(safeParsed?.documentInfo?.totalIssues?.errors) || 0,
+        warnings: Number(safeParsed?.documentInfo?.totalIssues?.warnings) || 0,
+        suggestions: Number(safeParsed?.documentInfo?.totalIssues?.suggestions) || 0
+      }
+    },
+    reviewContent: []
+  };
+
+  // 处理审阅内容
+  if (Array.isArray(safeParsed?.reviewContent)) {
+    result.reviewContent = safeParsed.reviewContent.map((item) => ({
+      id: String(item?.id || ''),
+      originalText: String(item?.originalText || ''),
+      changes: Array.isArray(item?.changes) 
+        ? item.changes.map((change) => {
+            // 确保 type 是有效的值
+            let type: "replace" | "insert" | "delete" = "replace";
+            if (change?.type === "insert") type = "insert";
+            if (change?.type === "delete") type = "delete";
+
+            // 确保 severity 是有效的值
+            let severity: "error" | "warning" | "suggestion" = "suggestion";
+            if (change?.severity === "error") severity = "error";
+            if (change?.severity === "warning") severity = "warning";
+
+            return {
+              type,
+              position: {
+                start: Number(change?.position?.start) || 0,
+                end: Number(change?.position?.end) || 0
+              },
+              originalText: String(change?.originalText || ''),
+              newText: String(change?.newText || ''),
+              explanation: String(change?.explanation || ''),
+              severity,
+              category: String(change?.category || '')
+            };
+          })
+        : []
+    }));
+  }
+
+  console.log('规范化后的结果:', result);
+  return result;
+}
+
+/**
+ * 验证解析结果是否符合预期结构
+ */
+function validateResult(result: unknown): result is ReviewResult {
+  if (!result || typeof result !== 'object' || result === null) {
+    return false;
+  }
+
+  const typedResult = result as Record<string, unknown>;
+  
+  return (
+    'documentInfo' in typedResult &&
+    'reviewContent' in typedResult &&
+    Array.isArray(typedResult.reviewContent)
+  );
+}
+
+/**
+ * 创建默认的审阅结果
+ */
+function createDefaultResult(): ReviewResult {
+  return {
+    documentInfo: {
+      title: "解析失败",
+      overview: "无法解析LLM返回的结果",
+      totalIssues: {
+        errors: 0,
+        warnings: 0,
+        suggestions: 0
+      }
+    },
+    reviewContent: []
   };
 }
 
@@ -37,13 +243,13 @@ export interface ReviewResult {
       newText?: string;
       explanation: string;
       severity: "error" | "warning" | "suggestion";
-      category: "grammar" | "data" | "style" | "format" | "logic";
+      category: string;
     }[];
   }[];
 }
 
 // 将LLM严重程度映射到应用严重程度
-function mapSeverity(severity: "error" | "warning" | "suggestion"): ChangeSeverity {
+function mapSeverity(severity: string): ChangeSeverity {
   switch (severity) {
     case "error": return "error";
     case "warning": return "warning";
@@ -53,7 +259,7 @@ function mapSeverity(severity: "error" | "warning" | "suggestion"): ChangeSeveri
 }
 
 // 将LLM类型映射到应用类型
-function mapChangeType(type: "replace" | "insert" | "delete"): ChangeType {
+function mapChangeType(type: string): ChangeType {
   switch (type) {
     case "replace": return "replace";
     case "insert": return "addition";
@@ -73,9 +279,12 @@ export async function reviewDocumentWithLLM(document: Document): Promise<ReviewR
     });
 
     // 生成审阅提示词
-    const prompt = generateReviewPrompt(document.title, paragraphTexts);
-    console.log('生成的提示词:', prompt);
+    const prompt = generateEnhancedReviewPrompt(document.title, paragraphTexts);
+    console.log('生成的提示词长度:', prompt.length);
 
+    // 选择模型 - 根据配置确定
+    const modelName = process.env.NEXT_PUBLIC_LLM_MODEL || "anthropic/claude-3-haiku:latest";
+    
     // 调用OpenRouter API
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -86,19 +295,17 @@ export async function reviewDocumentWithLLM(document: Document): Promise<ReviewR
         "X-Title": "Smart Doc Review"
       },
       body: JSON.stringify({
-        model: "google/gemini-2.0-pro-exp-02-05:free",
+        model: modelName,
         messages: [
           {
             role: "user",
             content: prompt
           }
         ],
-        temperature: 0.2,
+        temperature: 0.1,
         response_format: { type: "json" }
       })
     });
-
-    console.log('API响应状态:', response.status);
 
     if (!response.ok) {
       const errorData = await response.json();
@@ -107,100 +314,120 @@ export async function reviewDocumentWithLLM(document: Document): Promise<ReviewR
     }
 
     const data = await response.json();
-    console.log('API原始响应:', data);
     
     if (data.error) {
       console.error('API返回错误:', data.error);
       throw new Error(`API返回错误: ${data.error.message}`);
     }
 
-    // 解析返回的JSON结果
-    const jsonString = data.choices[0].message.content;
-    console.log('LLM返回的内容:', jsonString);
+    // 获取API返回的内容
+    let jsonContent = data.choices[0].message.content;
+    console.log('API返回的原始内容:', jsonContent);
 
-    let result: ReviewResult;
+    // 预处理返回的内容
     try {
-      // 提取JSON部分（防止模型返回额外的文本）
-      const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        console.error('无法从响应中提取JSON');
-        throw new Error("无法从响应中提取JSON");
+      // 如果返回的是字符串形式的JSON，先解析一次
+      if (typeof jsonContent === 'string') {
+        // 移除可能的 markdown 代码块标记
+        jsonContent = jsonContent.replace(/```json\n?|\n?```/g, '');
+        
+        // 尝试解析JSON字符串
+        try {
+          const parsedContent = JSON.parse(jsonContent);
+          console.log('成功解析返回的JSON');
+          
+          // 验证并规范化结果
+          const result = normalizeResult(parsedContent);
+          if (validateResult(result)) {
+            return result;
+          }
+        } catch (parseError) {
+          console.error('解析返回的JSON失败:', parseError);
+        }
       }
       
-      // 清理JSON字符串
-      let cleanJson = jsonMatch[0]
-        .replace(/[\u0000-\u001F]+/g, '') // 移除不可见字符
-        .replace(/[""]/g, '"')  // 替换中文引号
-        .replace(/['']/g, "'")  // 替换中文单引号
-        .replace(/\\n/g, ' ')   // 替换换行符
-        .replace(/\\r/g, ' ')   // 替换回车符
-        .replace(/\s+/g, ' ');  // 压缩空白字符
-        
-      // 处理HTML标签
-      cleanJson = cleanJson
-        .replace(/<[^>]*>/g, '')  // 移除HTML标签
-        .replace(/&quot;/g, '"')  // 转换HTML实体
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>');
-      
-      console.log('清理后的JSON字符串:', cleanJson);
-      
-      try {
-        result = JSON.parse(cleanJson);
-      } catch (parseError) {
-        console.error('第一次解析失败，尝试进一步清理:', parseError);
-        // 如果第一次解析失败，尝试更激进的清理
-        cleanJson = cleanJson
-          .replace(/[^\x20-\x7E]/g, '') // 只保留基本ASCII字符
-          .replace(/\\/g, '\\\\')        // 转义反斜杠
-          .replace(/(?<!\\)"/g, '\\"');  // 转义未转义的引号
-        
-        console.log('进一步清理后的JSON字符串:', cleanJson);
-        result = JSON.parse(cleanJson);
-      }
-      
-      console.log('解析后的结果:', result);
-    } catch (e) {
-      console.error("解析JSON失败:", e);
-      throw new Error("解析模型返回的JSON结果失败");
+      // 如果上面的方法失败，返回一个基本的结果结构
+      return {
+        documentInfo: {
+          title: document.title,
+          overview: "解析API返回结果时出错，请重试。",
+          totalIssues: {
+            errors: 0,
+            warnings: 0,
+            suggestions: 0
+          }
+        },
+        reviewContent: document.paragraphs.map((para, index) => ({
+          id: `error-${index}`,
+          originalText: para.text,
+          changes: []
+        }))
+      };
+    } catch (error) {
+      console.error('处理API返回内容时出错:', error);
+      return createDefaultResult();
     }
-
-    return result;
   } catch (error) {
     console.error("LLM审阅失败:", error);
-    // 返回一个错误状态的结果
-    return {
-      documentInfo: {
-        title: document.title,
-        overview: "审阅过程中发生错误",
-        totalIssues: {
-          errors: 0,
-          warnings: 0,
-          suggestions: 0
-        }
-      },
-      reviewContent: []
-    };
+    return createDefaultResult();
   }
 }
 
 // 将LLM审阅结果转换为应用内部的变更格式
 export function convertReviewToChanges(review: ReviewResult): Paragraph[] {
+  if (!review.reviewContent || !Array.isArray(review.reviewContent)) {
+    console.error("审阅结果不包含有效的reviewContent数组");
+    return [];
+  }
+  
   return review.reviewContent.map((content, index) => {
+    if (!content.changes || !Array.isArray(content.changes)) {
+      return {
+        id: index + 1,
+        text: content.originalText || "",
+        changes: []
+      };
+    }
+    
     return {
       id: index + 1,
-      text: content.originalText,
+      text: content.originalText || "",
       changes: content.changes.map((change, changeIndex) => {
+        // 映射类型
+        let type: ChangeType;
+        switch (change.type) {
+          case "insert":
+            type = "addition";
+            break;
+          case "delete":
+            type = "deletion";
+            break;
+          default:
+            type = "replace";
+        }
+
+        // 映射严重程度
+        let severity: ChangeSeverity;
+        switch (change.severity) {
+          case "error":
+            severity = "error";
+            break;
+          case "warning":
+            severity = "warning";
+            break;
+          default:
+            severity = "info";
+        }
+
         return {
           id: `llm-change-${index}-${changeIndex}`,
-          type: mapChangeType(change.type),
+          type,
           original: change.originalText || "",
           new: change.newText || "",
-          explanation: change.explanation,
-          severity: change.severity as ChangeSeverity
+          explanation: change.explanation || "未提供说明",
+          severity
         };
       })
     };
   });
-} 
+}

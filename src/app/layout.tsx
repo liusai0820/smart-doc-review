@@ -1,20 +1,25 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "sonner";
+
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "智能文档审阅系统",
-  description: "AI驱动的文档分析与审阅平台",
+  description: "基于AI的智能文档审阅和优化系统",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="zh-CN">
-      <body className="antialiased">
+    <html lang="zh">
+      <body className={inter.className}>
         {children}
+        <Toaster richColors position="top-center" />
       </body>
     </html>
   );

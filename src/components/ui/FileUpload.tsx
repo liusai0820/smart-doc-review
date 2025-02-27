@@ -15,6 +15,8 @@ const FileUpload: FC<FileUploadProps> = ({ onUploadComplete }) => {
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
   const handleButtonClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
@@ -26,9 +28,20 @@ const FileUpload: FC<FileUploadProps> = ({ onUploadComplete }) => {
     if (!files || files.length === 0) return;
 
     const file = files[0];
+    
+    // 检查文件类型
     if (!file.name.endsWith('.docx') && !file.name.endsWith('.pdf') && !file.name.endsWith('.txt')) {
       setNotification({
         message: "只支持 .docx, .pdf 和 .txt 格式的文档",
+        type: "error"
+      });
+      return;
+    }
+
+    // 检查文件大小
+    if (file.size > MAX_FILE_SIZE) {
+      setNotification({
+        message: "文件大小不能超过10MB",
         type: "error"
       });
       return;
@@ -40,7 +53,7 @@ const FileUpload: FC<FileUploadProps> = ({ onUploadComplete }) => {
       // 读取文件内容
       const fileContent = await file.arrayBuffer();
       
-      // 创建临时URL（在实际应用中，这里应该上传文件到服务器并获取真实URL）
+      // 创建临时URL
       const fileUrl = URL.createObjectURL(file);
       
       // 模拟上传延迟
@@ -62,7 +75,7 @@ const FileUpload: FC<FileUploadProps> = ({ onUploadComplete }) => {
       });
     } finally {
       setIsUploading(false);
-      // 重置文件输入，以便同一个文件可以再次上传
+      // 重置文件输入
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }

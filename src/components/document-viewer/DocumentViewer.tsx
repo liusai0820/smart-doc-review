@@ -60,7 +60,7 @@ export default function DocumentViewer({ document }: DocumentViewerProps) {
             <div className="flex gap-2">
               <span className="badge-error">错误 {errorCount}</span>
               <span className="badge-warning">警告 {warningCount}</span>
-              <span className="badge-suggestion">建议 {infoCount}</span>
+              <span className="badge-info">建议 {infoCount}</span>
             </div>
           </div>
         </div>
