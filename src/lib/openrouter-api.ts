@@ -227,7 +227,7 @@ export async function reviewDocumentWithLLM(
     console.log('生成的提示词长度:', prompt.length);
 
     // 选择模型 - 根据配置确定
-    const modelName = process.env.NEXT_PUBLIC_LLM_MODEL || "anthropic/claude-3-haiku:latest";
+    const modelName = process.env.NEXT_PUBLIC_LLM_MODEL || "google/gemini-2.0-pro-exp-02-05:free";
     
     // 调用OpenRouter API
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {

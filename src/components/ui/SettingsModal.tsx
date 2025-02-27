@@ -8,7 +8,7 @@ interface SettingsModalProps {
 
 const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   const [apiKey, setApiKey] = useState(process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || "");
-  const [modelName, setModelName] = useState("anthropic/claude-3-opus:beta");
+  const [modelName, setModelName] = useState("google/gemini-2.0-pro-exp-02-05:free");
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
 
@@ -58,10 +58,9 @@ const SettingsModal: FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 onChange={(e) => setModelName(e.target.value)}
                 className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded text-sm shadow-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               >
-                <option value="anthropic/claude-3-opus:beta">Claude 3 Opus</option>
-                <option value="anthropic/claude-3-sonnet:beta">Claude 3 Sonnet</option>
-                <option value="openai/gpt-4-turbo">GPT-4 Turbo</option>
-                <option value="openai/gpt-4o">GPT-4o</option>
+                <option value="deepseek/deepseek-r1:free">DeepSeek Coder R1</option>
+                <option value="google/gemini-2.0-pro-exp-02-05:free">Gemini 2.0 Pro</option>
+                <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
               </select>
             </label>
           </div>
