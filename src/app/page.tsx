@@ -1,101 +1,227 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { FileText, History, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import DocumentList from "@/components/document-list/DocumentList";
+import DocumentViewer from "@/components/document-viewer/DocumentViewer";
+import DocumentInsights from "@/components/document-insights/DocumentInsights";
+import { mockDocuments } from "@/lib/mock-data";
+import { Document } from "@/lib/mock-data";
+import HistoryModal from "@/components/ui/HistoryModal";
+import SettingsModal from "@/components/ui/SettingsModal";
+import Notification from "@/components/ui/Notification";
+import mammoth from "mammoth";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+  const [documents, setDocuments] = useState(mockDocuments);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [notification, setNotification] = useState<{
+    message: string;
+    type: "success" | "error" | "info";
+  } | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const handleSelectDocument = (document: Document) => {
+    setSelectedDocument(document);
+  };
+
+  const parseDocumentContent = async (fileContent: ArrayBuffer, fileName: string) => {
+    try {
+      let html = "";
+      
+      if (fileName.endsWith('.docx')) {
+        // 使用 mammoth 转换为 HTML,保留更多格式
+        const result = await mammoth.convertToHtml({ arrayBuffer: fileContent }, {
+          styleMap: [
+            "p[style-name='Title'] => h1.doc-title:fresh",
+            "p[style-name='Heading 1'] => h2.doc-heading:fresh",
+            "p[style-name='Heading 2'] => h3.doc-heading:fresh",
+            "p => p.doc-paragraph:fresh",
+            "table => table.doc-table:fresh",
+            "tr => tr.doc-tr:fresh",
+            "td => td.doc-td:fresh",
+            "th => th.doc-th:fresh",
+            "b => strong.doc-bold:fresh",
+            "i => em.doc-italic:fresh",
+            "u => span.doc-underline:fresh",
+            "comment-reference => span.doc-comment:fresh"
+          ],
+          transformDocument: (element) => {
+            // 保留原始样式和结构
+            return element;
+          },
+          ignoreEmptyParagraphs: false
+        });
+        html = result.value;
+
+        // 将 HTML 分割成段落和表格
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        
+        const paragraphs = Array.from(tempDiv.children).map((element, index) => {
+          const isTable = element.tagName.toLowerCase() === 'table';
+          return {
+            id: index + 1,
+            text: element.outerHTML,
+            isHtml: true,
+            isTable,
+            changes: []
+          };
+        });
+
+        return paragraphs;
+      } else if (fileName.endsWith('.txt')) {
+        // 解析 TXT 文件,转换为 HTML 格式
+        const decoder = new TextDecoder('utf-8');
+        const text = decoder.decode(fileContent);
+        const paragraphs = text.split('\n\n')
+          .filter(p => p.trim())
+          .map((p, index) => ({
+            id: index + 1,
+            text: `<p class="doc-paragraph">${p.trim()}</p>`,
+            isHtml: true,
+            isTable: false,
+            changes: []
+          }));
+
+        return paragraphs;
+      } else if (fileName.endsWith('.pdf')) {
+        // TODO: 添加 PDF 解析逻辑
+        return [{
+          id: 1,
+          text: "<p class='doc-paragraph'>PDF 文件解析功能即将推出</p>",
+          isHtml: true,
+          isTable: false,
+          changes: []
+        }];
+      }
+
+      throw new Error('不支持的文件格式');
+    } catch (err) {
+      console.error('解析文档失败:', err);
+      throw err;
+    }
+  };
+
+  const handleUploadComplete = async (fileName: string, fileContent?: ArrayBuffer, fileUrl?: string) => {
+    if (!fileContent) {
+      setNotification({
+        message: "文件内容为空",
+        type: "error"
+      });
+      return;
+    }
+
+    try {
+      // 解析文档内容
+      const paragraphs = await parseDocumentContent(fileContent, fileName);
+
+      // 创建新文档
+      const newDocument = {
+        id: `doc-${Date.now()}`,
+        title: fileName.replace(/\.(docx|pdf|txt)$/, ""),
+        date: new Date().toISOString().split("T")[0],
+        status: "pending" as const,
+        paragraphs,
+        fileUrl: fileUrl || undefined
+      };
+
+      // 添加到文档列表
+      const updatedDocuments = [newDocument, ...documents];
+      setDocuments(updatedDocuments);
+      
+      // 自动选择新上传的文档
+      setSelectedDocument(newDocument);
+      
+      // 显示成功通知
+      setNotification({
+        message: `文档 "${fileName}" 已成功解析并添加到列表`,
+        type: "success"
+      });
+    } catch (err) {
+      console.error('文档解析失败:', err);
+      setNotification({
+        message: `解析文档 "${fileName}" 失败，请重试`,
+        type: "error"
+      });
+    }
+  };
+
+  return (
+    <main className="min-h-screen flex flex-col">
+      {/* 顶部导航栏 */}
+      <header className="bg-white border-b border-gray-200 shadow-sm py-4 px-6">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center">
+            <FileText className="h-6 w-6 text-blue-500 mr-2" />
+            <h1 className="text-xl font-semibold text-gray-800">智能文档审阅系统</h1>
+          </div>
+          <div className="flex gap-3">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex gap-1"
+              onClick={() => setIsHistoryModalOpen(true)}
+            >
+              <History size={18} />
+              <span>历史记录</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex gap-1"
+              onClick={() => setIsSettingsModalOpen(true)}
+            >
+              <Settings size={18} />
+              <span>设置</span>
+            </Button>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+      </header>
+
+      {/* 主内容区 */}
+      <div className="flex-1 grid grid-cols-12 min-w-[1280px] p-6 gap-6">
+        {/* 左侧文档列表 */}
+        <div className="col-span-3">
+          <DocumentList 
+            documents={documents} 
+            selectedDocument={selectedDocument}
+            onSelectDocument={handleSelectDocument}
+            onUploadComplete={handleUploadComplete}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+        </div>
+
+        {/* 中间文档查看器 */}
+        <div className="col-span-6">
+          <DocumentViewer document={selectedDocument} />
+        </div>
+
+        {/* 右侧文档洞察面板 */}
+        <div className="col-span-3">
+          <DocumentInsights document={selectedDocument} />
+        </div>
+      </div>
+      
+      {/* 弹窗和通知 */}
+      <HistoryModal 
+        isOpen={isHistoryModalOpen} 
+        onClose={() => setIsHistoryModalOpen(false)} 
+      />
+      
+      <SettingsModal 
+        isOpen={isSettingsModalOpen} 
+        onClose={() => setIsSettingsModalOpen(false)} 
+      />
+      
+      {notification && (
+        <Notification
+          message={notification.message}
+          type={notification.type}
+          onClose={() => setNotification(null)}
+        />
+      )}
+    </main>
   );
 }
