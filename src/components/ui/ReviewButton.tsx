@@ -1,9 +1,11 @@
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Document, Paragraph } from "@/lib/mock-data";
 import { reviewDocumentWithLLM, convertReviewToChanges } from "@/lib/openrouter-api";
-import { Sparkles } from "lucide-react";
-import { useState } from "react";
+import { Sparkles, BookOpen } from "lucide-react";
 import { toast } from "sonner";
+import TemplateSelectionDialog from "../dialogs/TemplateSelectionDialog";
+import { generatePromptFromTemplate } from "@/lib/review-templates";
 
 interface ReviewButtonProps {
   document: Document;
@@ -17,15 +19,35 @@ export default function ReviewButton({
   onReviewComplete
 }: ReviewButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
-  const handleClick = async () => {
+  const handleClick = () => {
+    // 打开模板选择对话框
+    setIsTemplateDialogOpen(true);
+  };
+
+  const handleTemplateSelect = async (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    setIsTemplateDialogOpen(false);
+    
+    // 开始审阅
+    await startReview(templateId);
+  };
+
+  const startReview = async (templateId: string) => {
     if (isLoading) return;
     
     setIsLoading(true);
     onReviewStart();
     
     try {
-      const reviewResult = await reviewDocumentWithLLM(document);
+      // 生成基于模板的提示词
+      const documentContent = document.paragraphs.map(p => p.text).join('\n\n');
+      const customPrompt = generatePromptFromTemplate(templateId, document.title, documentContent);
+      
+      // 调用审阅API
+      const reviewResult = await reviewDocumentWithLLM(document, customPrompt);
       console.log('获取到审阅结果:', reviewResult);
       
       if (!reviewResult.reviewContent || reviewResult.reviewContent.length === 0) {
@@ -52,15 +74,33 @@ export default function ReviewButton({
   };
 
   return (
-    <Button
-      onClick={handleClick}
-      className="flex items-center gap-1"
-      variant="default"
-      size="sm"
-      disabled={isLoading}
-    >
-      <Sparkles size={16} className={isLoading ? 'animate-spin' : ''} />
-      <span>{isLoading ? '正在审阅...' : 'AI文档审阅'}</span>
-    </Button>
+    <>
+      <Button
+        onClick={handleClick}
+        className="flex items-center gap-1"
+        variant="default"
+        size="sm"
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <>
+            <Sparkles size={16} className="animate-spin" />
+            <span>正在审阅...</span>
+          </>
+        ) : (
+          <>
+            <Sparkles size={16} />
+            <span>AI文档审阅</span>
+          </>
+        )}
+      </Button>
+      
+      <TemplateSelectionDialog 
+        isOpen={isTemplateDialogOpen}
+        document={document}
+        onClose={() => setIsTemplateDialogOpen(false)}
+        onSelectTemplate={handleTemplateSelect}
+      />
+    </>
   );
-} 
+}

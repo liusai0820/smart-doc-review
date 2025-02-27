@@ -5,119 +5,60 @@ import { generateEnhancedReviewPrompt } from "./prompts/enhanced-review-prompt";
  * 更健壮的JSON解析函数，处理LLM返回的可能格式不正确的JSON
  */
 function parseRobustJSON(jsonString: string): ReviewResult {
-  // 打印原始输入以便调试
-  console.log('待解析的JSON字符串:', jsonString);
-
-  // 如果输入为空，返回默认结果
-  if (!jsonString) {
-    console.error('输入的JSON字符串为空');
-    return createDefaultResult();
-  }
-
   try {
-    // 预处理 - 处理转义字符
-    let processedString = jsonString;
-    
-    // 如果整个字符串被引号包围，去除外层引号
-    if (processedString.startsWith('"') && processedString.endsWith('"')) {
-      try {
-        // 先解析外层字符串
-        processedString = JSON.parse(processedString);
-      } catch (e) {
-        console.error('解析外层字符串失败:', e);
-      }
-    }
-
-    // 查找第一个 { 和最后一个 } 的位置
-    let startIdx = processedString.indexOf('{');
-    let endIdx = processedString.lastIndexOf('}');
-    
-    if (startIdx === -1 || endIdx === -1) {
-      console.error('JSON字符串中没有找到有效的对象标记');
-      return createDefaultResult();
-    }
-
-    // 提取JSON对象部分
-    processedString = processedString.substring(startIdx, endIdx + 1);
-
-    // 第一阶段：修复转义字符
-    processedString = processedString
-      // 处理错误的转义
-      .replace(/\\\\/g, '\\')
-      .replace(/\\"/g, '"')
-      .replace(/\\'/g, "'")
-      // 处理Unicode转义
-      .replace(/\\u([0-9a-fA-F]{4})/g, (_, code) => 
-        String.fromCharCode(parseInt(code, 16))
-      );
-
-    // 第二阶段：标准化JSON格式
-    processedString = processedString
-      // 处理引号
-      .replace(/[""]/g, '"')
-      .replace(/['']/g, '"')
-      // 处理空白字符
-      .replace(/[\n\r\t]/g, ' ')
-      .replace(/\s+/g, ' ')
-      // 确保属性名有引号
-      .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
-
-    // 第三阶段：修复值格式
-    processedString = processedString
-      // 处理未加引号的字符串值
-      .replace(/:\s*([^",\s\][{}][^,}]*[^",\s\][{}])/g, ':"$1"')
-      // 处理数字
-      .replace(/:(\s*-?\d+\.?\d*\s*)([,}])/g, ':$1$2')
-      // 处理布尔值和null
-      .replace(/:\s*true\b/gi, ':true')
-      .replace(/:\s*false\b/gi, ':false')
-      .replace(/:\s*null\b/gi, ':null');
-
-    // 第四阶段：修复结构问题
-    processedString = processedString
+    // 预处理 JSON 字符串
+    const processedString = jsonString
+      // 移除可能的 markdown 代码块标记
+      .replace(/```json\s*|\s*```/g, '')
+      // 移除注释
+      .replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '')
+      // 修复缺少的引号
+      .replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3')
       // 修复多余的逗号
-      .replace(/,\s*([}\]])/g, '$1')
+      .replace(/,(\s*[}\]])/g, '$1')
       // 修复缺少的逗号
       .replace(/}(\s*){/g, '},{')
       .replace(/](\s*)\[/g, '],[')
-      .replace(/"([^"]+)"\s*"([^"]+)"/g, '"$1","$2"');
+      .replace(/"([^"]+)"\s*"([^"]+)"/g, '"$1","$2"')
+      // 修复布尔值和数字
+      .replace(/"(true|false|null|\d+)"/g, '$1')
+      // 修复未闭合的对象或数组
+      .replace(/([^}])\s*$/, '$1}')
+      .replace(/([^\]])\s*$/, '$1]');
 
-    console.log('清理后的JSON字符串:', processedString);
-
+    // 尝试解析处理后的字符串
     try {
-      // 尝试解析
       const parsed = JSON.parse(processedString);
-      console.log('初步解析结果:', parsed);
-      
-      // 验证并规范化结果
       const result = normalizeResult(parsed);
       
-      if (!validateResult(result)) {
-        console.error('解析结果不符合预期结构');
-        return createDefaultResult();
+      if (validateResult(result)) {
+        return result;
       }
-
-      return result;
     } catch (parseError) {
-      console.error('JSON解析失败，错误信息:', parseError);
-      
-      // 最后尝试：直接解析原始字符串
+      console.warn('处理后的JSON解析失败，尝试其他方法:', parseError);
+    }
+
+    // 如果上述方法失败，尝试提取最外层的 JSON 对象
+    const jsonMatch = jsonString.match(/{[\s\S]*}/);
+    if (jsonMatch) {
       try {
-        const parsed = JSON.parse(jsonString);
+        const extracted = jsonMatch[0];
+        const parsed = JSON.parse(extracted);
         const result = normalizeResult(parsed);
         
-        if (!validateResult(result)) {
-          return createDefaultResult();
+        if (validateResult(result)) {
+          return result;
         }
-        
-        return result;
-      } catch (finalError) {
-        console.error('最终解析尝试失败:', finalError);
-        return createDefaultResult();
+      } catch (extractError) {
+        console.warn('提取JSON对象失败:', extractError);
       }
     }
+
+    // 如果所有尝试都失败，返回默认结果
+    console.error('所有JSON解析尝试都失败');
+    return createDefaultResult();
   } catch (error) {
-    console.error('JSON处理失败:', error);
+    console.error('JSON处理过程中发生错误:', error);
     return createDefaultResult();
   }
 }
@@ -180,7 +121,6 @@ function normalizeResult(parsed: unknown): ReviewResult {
     }));
   }
 
-  console.log('规范化后的结果:', result);
   return result;
 }
 
@@ -268,18 +208,22 @@ function mapChangeType(type: string): ChangeType {
   }
 }
 
-export async function reviewDocumentWithLLM(document: Document): Promise<ReviewResult> {
+export async function reviewDocumentWithLLM(
+  document: Document, 
+  customPrompt?: string
+): Promise<ReviewResult> {
   try {
     // 构建发送给LLM的文档内容
     const paragraphTexts = document.paragraphs.map(p => p.text).join('\n\n');
     
     console.log('开始调用LLM审阅文档:', {
       title: document.title,
-      paragraphCount: document.paragraphs.length
+      paragraphCount: document.paragraphs.length,
+      usingCustomPrompt: !!customPrompt
     });
 
     // 生成审阅提示词
-    const prompt = generateEnhancedReviewPrompt(document.title, paragraphTexts);
+    const prompt = customPrompt || generateEnhancedReviewPrompt(document.title, paragraphTexts);
     console.log('生成的提示词长度:', prompt.length);
 
     // 选择模型 - 根据配置确定
@@ -321,52 +265,10 @@ export async function reviewDocumentWithLLM(document: Document): Promise<ReviewR
     }
 
     // 获取API返回的内容
-    let jsonContent = data.choices[0].message.content;
-    console.log('API返回的原始内容:', jsonContent);
-
-    // 预处理返回的内容
-    try {
-      // 如果返回的是字符串形式的JSON，先解析一次
-      if (typeof jsonContent === 'string') {
-        // 移除可能的 markdown 代码块标记
-        jsonContent = jsonContent.replace(/```json\n?|\n?```/g, '');
-        
-        // 尝试解析JSON字符串
-        try {
-          const parsedContent = JSON.parse(jsonContent);
-          console.log('成功解析返回的JSON');
-          
-          // 验证并规范化结果
-          const result = normalizeResult(parsedContent);
-          if (validateResult(result)) {
-            return result;
-          }
-        } catch (parseError) {
-          console.error('解析返回的JSON失败:', parseError);
-        }
-      }
-      
-      // 如果上面的方法失败，返回一个基本的结果结构
-      return {
-        documentInfo: {
-          title: document.title,
-          overview: "解析API返回结果时出错，请重试。",
-          totalIssues: {
-            errors: 0,
-            warnings: 0,
-            suggestions: 0
-          }
-        },
-        reviewContent: document.paragraphs.map((para, index) => ({
-          id: `error-${index}`,
-          originalText: para.text,
-          changes: []
-        }))
-      };
-    } catch (error) {
-      console.error('处理API返回内容时出错:', error);
-      return createDefaultResult();
-    }
+    const jsonContent = data.choices[0].message.content;
+    
+    // 使用parseRobustJSON来解析返回的内容
+    return parseRobustJSON(jsonContent);
   } catch (error) {
     console.error("LLM审阅失败:", error);
     return createDefaultResult();
@@ -393,31 +295,9 @@ export function convertReviewToChanges(review: ReviewResult): Paragraph[] {
       id: index + 1,
       text: content.originalText || "",
       changes: content.changes.map((change, changeIndex) => {
-        // 映射类型
-        let type: ChangeType;
-        switch (change.type) {
-          case "insert":
-            type = "addition";
-            break;
-          case "delete":
-            type = "deletion";
-            break;
-          default:
-            type = "replace";
-        }
-
-        // 映射严重程度
-        let severity: ChangeSeverity;
-        switch (change.severity) {
-          case "error":
-            severity = "error";
-            break;
-          case "warning":
-            severity = "warning";
-            break;
-          default:
-            severity = "info";
-        }
+        // 使用mapChangeType和mapSeverity来映射类型和严重程度
+        const type = mapChangeType(change.type);
+        const severity = mapSeverity(change.severity);
 
         return {
           id: `llm-change-${index}-${changeIndex}`,

@@ -6,14 +6,17 @@ import { Document, Paragraph } from "@/lib/mock-data";
 import OriginalView from "./OriginalView";
 import ReviewView from "./ReviewView";
 import ReviewButton from "../ui/ReviewButton";
+import ExportButton from "../ui/ExportButton"; // 导入导出按钮
 
 interface DocumentViewerProps {
   document: Document | null;
+  onReviewComplete?: (paragraphs: Paragraph[]) => void;
 }
 
-export default function DocumentViewer({ document }: DocumentViewerProps) {
+export default function DocumentViewer({ document, onReviewComplete }: DocumentViewerProps) {
   const [isReviewing, setIsReviewing] = useState(false);
   const [aiReviewedParagraphs, setAiReviewedParagraphs] = useState<Paragraph[] | null>(null);
+  const [activeTab, setActiveTab] = useState("review");
 
   // 处理AI审阅开始
   const handleReviewStart = () => {
@@ -25,6 +28,8 @@ export default function DocumentViewer({ document }: DocumentViewerProps) {
   const handleReviewComplete = (paragraphs: Paragraph[]) => {
     setIsReviewing(false);
     setAiReviewedParagraphs(paragraphs);
+    // 调用父组件的回调函数
+    onReviewComplete?.(paragraphs);
   };
   
   if (!document) {
@@ -57,6 +62,11 @@ export default function DocumentViewer({ document }: DocumentViewerProps) {
               onReviewStart={handleReviewStart}
               onReviewComplete={handleReviewComplete}
             />
+            {/* 添加导出按钮 */}
+            <ExportButton 
+              document={aiReviewedParagraphs ? {...document, paragraphs: aiReviewedParagraphs} : document} 
+              isLoading={isReviewing}
+            />
             <div className="flex gap-2">
               <span className="badge-error">错误 {errorCount}</span>
               <span className="badge-warning">警告 {warningCount}</span>
@@ -66,7 +76,7 @@ export default function DocumentViewer({ document }: DocumentViewerProps) {
         </div>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="review" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="tab-container">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="review" className="tab-active">审阅视图</TabsTrigger>
