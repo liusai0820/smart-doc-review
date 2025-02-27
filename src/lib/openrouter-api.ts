@@ -1,163 +1,6 @@
 import { Document, Paragraph, ChangeType, ChangeSeverity } from "./mock-data";
 import { generateEnhancedReviewPrompt } from "./prompts/enhanced-review-prompt";
-
-/**
- * 更健壮的JSON解析函数，处理LLM返回的可能格式不正确的JSON
- */
-function parseRobustJSON(jsonString: string): ReviewResult {
-  try {
-    // 预处理 JSON 字符串
-    const processedString = jsonString
-      // 移除可能的 markdown 代码块标记
-      .replace(/```json\s*|\s*```/g, '')
-      // 移除注释
-      .replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '')
-      // 修复缺少的引号
-      .replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3')
-      // 修复多余的逗号
-      .replace(/,(\s*[}\]])/g, '$1')
-      // 修复缺少的逗号
-      .replace(/}(\s*){/g, '},{')
-      .replace(/](\s*)\[/g, '],[')
-      .replace(/"([^"]+)"\s*"([^"]+)"/g, '"$1","$2"')
-      // 修复布尔值和数字
-      .replace(/"(true|false|null|\d+)"/g, '$1')
-      // 修复未闭合的对象或数组
-      .replace(/([^}])\s*$/, '$1}')
-      .replace(/([^\]])\s*$/, '$1]');
-
-    // 尝试解析处理后的字符串
-    try {
-      const parsed = JSON.parse(processedString);
-      const result = normalizeResult(parsed);
-      
-      if (validateResult(result)) {
-        return result;
-      }
-    } catch (parseError) {
-      console.warn('处理后的JSON解析失败，尝试其他方法:', parseError);
-    }
-
-    // 如果上述方法失败，尝试提取最外层的 JSON 对象
-    const jsonMatch = jsonString.match(/{[\s\S]*}/);
-    if (jsonMatch) {
-      try {
-        const extracted = jsonMatch[0];
-        const parsed = JSON.parse(extracted);
-        const result = normalizeResult(parsed);
-        
-        if (validateResult(result)) {
-          return result;
-        }
-      } catch (extractError) {
-        console.warn('提取JSON对象失败:', extractError);
-      }
-    }
-
-    // 如果所有尝试都失败，返回默认结果
-    console.error('所有JSON解析尝试都失败');
-    return createDefaultResult();
-  } catch (error) {
-    console.error('JSON处理过程中发生错误:', error);
-    return createDefaultResult();
-  }
-}
-
-/**
- * 规范化解析结果
- */
-function normalizeResult(parsed: unknown): ReviewResult {
-  const safeParsed = parsed as Partial<ReviewResult>;
-  
-  // 确保基本结构存在
-  const result: ReviewResult = {
-    documentInfo: {
-      title: typeof safeParsed?.documentInfo?.title === 'string' 
-        ? safeParsed.documentInfo.title 
-        : '未知标题',
-      overview: typeof safeParsed?.documentInfo?.overview === 'string'
-        ? safeParsed.documentInfo.overview
-        : '无概述',
-      totalIssues: {
-        errors: Number(safeParsed?.documentInfo?.totalIssues?.errors) || 0,
-        warnings: Number(safeParsed?.documentInfo?.totalIssues?.warnings) || 0,
-        suggestions: Number(safeParsed?.documentInfo?.totalIssues?.suggestions) || 0
-      }
-    },
-    reviewContent: []
-  };
-
-  // 处理审阅内容
-  if (Array.isArray(safeParsed?.reviewContent)) {
-    result.reviewContent = safeParsed.reviewContent.map((item) => ({
-      id: String(item?.id || ''),
-      originalText: String(item?.originalText || ''),
-      changes: Array.isArray(item?.changes) 
-        ? item.changes.map((change) => {
-            // 确保 type 是有效的值
-            let type: "replace" | "insert" | "delete" = "replace";
-            if (change?.type === "insert") type = "insert";
-            if (change?.type === "delete") type = "delete";
-
-            // 确保 severity 是有效的值
-            let severity: "error" | "warning" | "suggestion" = "suggestion";
-            if (change?.severity === "error") severity = "error";
-            if (change?.severity === "warning") severity = "warning";
-
-            return {
-              type,
-              position: {
-                start: Number(change?.position?.start) || 0,
-                end: Number(change?.position?.end) || 0
-              },
-              originalText: String(change?.originalText || ''),
-              newText: String(change?.newText || ''),
-              explanation: String(change?.explanation || ''),
-              severity,
-              category: String(change?.category || '')
-            };
-          })
-        : []
-    }));
-  }
-
-  return result;
-}
-
-/**
- * 验证解析结果是否符合预期结构
- */
-function validateResult(result: unknown): result is ReviewResult {
-  if (!result || typeof result !== 'object' || result === null) {
-    return false;
-  }
-
-  const typedResult = result as Record<string, unknown>;
-  
-  return (
-    'documentInfo' in typedResult &&
-    'reviewContent' in typedResult &&
-    Array.isArray(typedResult.reviewContent)
-  );
-}
-
-/**
- * 创建默认的审阅结果
- */
-function createDefaultResult(): ReviewResult {
-  return {
-    documentInfo: {
-      title: "解析失败",
-      overview: "无法解析LLM返回的结果",
-      totalIssues: {
-        errors: 0,
-        warnings: 0,
-        suggestions: 0
-      }
-    },
-    reviewContent: []
-  };
-}
+import { parseRobustJSON } from "./improved-json-parser";
 
 // 审阅结果接口
 export interface ReviewResult {
@@ -209,7 +52,9 @@ function mapChangeType(type: string): ChangeType {
 }
 
 export async function reviewDocumentWithLLM(
-  document: Document, 
+  document: Document,
+  apiKey?: string,
+  modelName?: string,
   customPrompt?: string
 ): Promise<ReviewResult> {
   try {
@@ -226,52 +71,156 @@ export async function reviewDocumentWithLLM(
     const prompt = customPrompt || generateEnhancedReviewPrompt(document.title, paragraphTexts);
     console.log('生成的提示词长度:', prompt.length);
 
-    // 选择模型 - 根据配置确定
-    const modelName = process.env.NEXT_PUBLIC_LLM_MODEL || "google/gemini-2.0-pro-exp-02-05:free";
+    // 使用传入的API密钥和模型名称，如果没有则使用环境变量
+    const effectiveApiKey = apiKey || process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || '';
+    
+    // 获取模型名称的优先级：
+    // 1. 传入的modelName参数
+    // 2. localStorage中存储的值
+    // 3. 环境变量
+    // 4. 默认值
+    let effectiveModelName = modelName;
+    if (!effectiveModelName && typeof window !== 'undefined') {
+      effectiveModelName = localStorage.getItem('llm_model') || '';
+    }
+    if (!effectiveModelName) {
+      effectiveModelName = process.env.NEXT_PUBLIC_LLM_MODEL || "google/gemini-2.0-pro-exp-02-05:free";
+    }
+    
+    // 添加更多日志信息以便调试
+    console.log('模型选择过程:', {
+      passedModel: modelName,
+      localStorageModel: typeof window !== 'undefined' ? localStorage.getItem('llm_model') : null,
+      envModel: process.env.NEXT_PUBLIC_LLM_MODEL,
+      finalModel: effectiveModelName
+    });
     
     // 调用OpenRouter API
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || ''}`,
-        "HTTP-Referer": window.location.origin,
-        "X-Title": "Smart Doc Review"
-      },
-      body: JSON.stringify({
-        model: modelName,
-        messages: [
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.1,
-        response_format: { type: "json" }
-      })
-    });
+    try {
+      console.log('准备发送请求到OpenRouter API:', {
+        model: effectiveModelName,
+        promptLength: prompt.length,
+        hasApiKey: !!effectiveApiKey
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('API调用失败:', errorData);
-      throw new Error(`API调用失败: ${errorData.error?.message || response.statusText}`);
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${effectiveApiKey}`,
+          "HTTP-Referer": window.location.origin,
+          "X-Title": "Smart Doc Review"
+        },
+        body: JSON.stringify({
+          model: effectiveModelName,
+          messages: [
+            {
+              role: "system",
+              content: `你是一个专业的文档审阅助手。请以JSON格式返回审阅结果，包含文档信息和具体的修改建议。
+注意：
+1. 返回的JSON中不要包含任何HTML或XML标签
+2. 所有文本内容应该是纯文本格式
+3. 如果需要强调某些内容，请使用其他方式，而不是标签
+4. 确保JSON格式严格符合规范`
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 4000
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API响应不成功:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText
+        });
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch (e) {
+          errorData = { error: { message: errorText } };
+        }
+        
+        throw new Error(`API调用失败: ${errorData.error?.message || response.statusText}`);
+      }
+
+      console.log('API响应成功，正在解析响应数据');
+      const data = await response.json();
+      
+      if (data.error) {
+        console.error('API返回错误对象:', data.error);
+        throw new Error(`API返回错误: ${data.error.message}`);
+      }
+
+      // 获取API返回的内容并进行预处理
+      let jsonContent = data.choices[0].message.content;
+      
+      // 清理JSON字符串中的特殊字符和HTML/XML标签
+      jsonContent = jsonContent
+        .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // 移除控制字符
+        .replace(/\n/g, ' ') // 将换行符替换为空格
+        .replace(/<[^>]*>/g, '') // 移除所有HTML/XML标签
+        .trim(); // 移除首尾空白
+      
+      // 尝试找到JSON的实际开始位置
+      const jsonStart = jsonContent.indexOf('{');
+      if (jsonStart !== -1) {
+        jsonContent = jsonContent.substring(jsonStart);
+      }
+      
+      // 尝试找到JSON的实际结束位置
+      const jsonEnd = jsonContent.lastIndexOf('}');
+      if (jsonEnd !== -1) {
+        jsonContent = jsonContent.substring(0, jsonEnd + 1);
+      }
+
+      console.log('清理后的JSON内容:', {
+        contentLength: jsonContent.length,
+        contentPreview: jsonContent.substring(0, 100) + '...'
+      });
+      
+      try {
+        // 首先尝试直接解析
+        const result = JSON.parse(jsonContent);
+        console.log('成功直接解析JSON');
+        return result;
+      } catch (parseError) {
+        console.warn('直接解析JSON失败，尝试使用改进的解析器:', parseError);
+        // 如果直接解析失败，使用改进的解析器
+        const result = parseRobustJSON(jsonContent);
+        console.log('使用改进的解析器成功解析JSON');
+        return result;
+      }
+    } catch (apiError) {
+      console.error("API调用或解析失败:", apiError);
+      
+      // 提供更详细的错误信息
+      if (apiError instanceof Error) {
+        console.error(`错误类型: ${apiError.name}, 错误消息: ${apiError.message}`);
+        if (apiError.stack) {
+          console.error(`错误堆栈: ${apiError.stack}`);
+        }
+      }
+      
+      throw apiError;
     }
-
-    const data = await response.json();
-    
-    if (data.error) {
-      console.error('API返回错误:', data.error);
-      throw new Error(`API返回错误: ${data.error.message}`);
-    }
-
-    // 获取API返回的内容
-    const jsonContent = data.choices[0].message.content;
-    
-    // 使用parseRobustJSON来解析返回的内容
-    return parseRobustJSON(jsonContent);
   } catch (error) {
     console.error("LLM审阅失败:", error);
-    return createDefaultResult();
+    return {
+      documentInfo: {
+        title: "审阅失败",
+        overview: error instanceof Error ? error.message : "未知错误",
+        totalIssues: { errors: 0, warnings: 0, suggestions: 0 }
+      },
+      reviewContent: []
+    };
   }
 }
 

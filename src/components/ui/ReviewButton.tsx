@@ -42,31 +42,46 @@ export default function ReviewButton({
     onReviewStart();
     
     try {
+      // 确保文档内容正确处理
+      const documentContent = document.paragraphs
+        .map(p => typeof p.text === 'string' ? p.text : '')
+        .filter(text => text.trim() !== '')
+        .join('\n\n');
+      
       // 生成基于模板的提示词
-      const documentContent = document.paragraphs.map(p => p.text).join('\n\n');
       const customPrompt = generatePromptFromTemplate(templateId, document.title, documentContent);
       
+      // 从localStorage获取API密钥和模型设置
+      const storedApiKey = localStorage.getItem('openrouter_api_key');
+      const storedModel = localStorage.getItem('llm_model');
+      
+      // 添加日志调试
+      console.log('审阅配置:', {
+        templateId,
+        documentTitle: document.title,
+        contentLength: documentContent.length,
+        storedModel,
+        hasStoredApiKey: !!storedApiKey
+      });
+      
       // 调用审阅API
-      const reviewResult = await reviewDocumentWithLLM(document, customPrompt);
-      console.log('获取到审阅结果:', reviewResult);
+      const reviewResult = await reviewDocumentWithLLM(
+        document,
+        storedApiKey || undefined,
+        storedModel || undefined,
+        customPrompt
+      );
       
       if (!reviewResult.reviewContent || reviewResult.reviewContent.length === 0) {
         throw new Error('审阅结果为空');
       }
-
+  
       const paragraphs = convertReviewToChanges(reviewResult);
-      console.log('转换后的段落:', paragraphs);
-      
-      if (!paragraphs || paragraphs.length === 0) {
-        throw new Error('转换结果为空');
-      }
-
       onReviewComplete(paragraphs);
       toast.success('文档审阅完成');
     } catch (error) {
       console.error('审阅失败:', error);
       toast.error('审阅失败: ' + (error instanceof Error ? error.message : '未知错误'));
-      // 在错误时也调用 onReviewComplete，但传入原始段落
       onReviewComplete(document.paragraphs);
     } finally {
       setIsLoading(false);
