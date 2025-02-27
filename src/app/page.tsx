@@ -41,33 +41,21 @@ export default function Home() {
   const parseDocumentContent = async (fileContent: ArrayBuffer, fileName: string) => {
     try {
       let html = "";
+      console.log(`开始解析文件: ${fileName}`);
       
       if (fileName.endsWith('.docx')) {
-        // 使用 mammoth 转换为 HTML,保留更多格式
-        const result = await mammoth.convertToHtml({ arrayBuffer: fileContent }, {
-          styleMap: [
-            "p[style-name='Title'] => h1.doc-title:fresh",
-            "p[style-name='Heading 1'] => h2.doc-heading:fresh",
-            "p[style-name='Heading 2'] => h3.doc-heading:fresh",
-            "p => p.doc-paragraph:fresh",
-            "table => table.doc-table:fresh",
-            "tr => tr.doc-tr:fresh",
-            "td => td.doc-td:fresh",
-            "th => th.doc-th:fresh",
-            "b => strong.doc-bold:fresh",
-            "i => em.doc-italic:fresh",
-            "u => span.doc-underline:fresh",
-            "comment-reference => span.doc-comment:fresh"
-          ],
-          transformDocument: (element) => {
-            // 保留原始样式和结构
-            return element;
-          },
-          ignoreEmptyParagraphs: false
-        });
-        html = result.value;
-
-        // 将 HTML 分割成段落和表格
+        // 增加错误处理和日志
+        try {
+          // 使用 mammoth 转换为 HTML
+          const result = await mammoth.convertToHtml({ arrayBuffer: fileContent });
+          html = result.value;
+          console.log("Mammoth转换成功");
+        } catch (mammothError) {
+          console.error("Mammoth转换失败:", mammothError);
+          throw mammothError;
+        }
+  
+        // 将 HTML 分割成段落
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = html;
         
@@ -81,10 +69,10 @@ export default function Home() {
             changes: []
           };
         });
-
+  
         return paragraphs;
       } else if (fileName.endsWith('.txt')) {
-        // 解析 TXT 文件,转换为 HTML 格式
+        // 解析 TXT 文件
         const decoder = new TextDecoder('utf-8');
         const text = decoder.decode(fileContent);
         const paragraphs = text.split('\n\n')
@@ -96,19 +84,10 @@ export default function Home() {
             isTable: false,
             changes: []
           }));
-
+  
         return paragraphs;
-      } else if (fileName.endsWith('.pdf')) {
-        // TODO: 添加 PDF 解析逻辑
-        return [{
-          id: 1,
-          text: "<p class='doc-paragraph'>PDF 文件解析功能即将推出</p>",
-          isHtml: true,
-          isTable: false,
-          changes: []
-        }];
       }
-
+  
       throw new Error('不支持的文件格式');
     } catch (err) {
       console.error('解析文档失败:', err);

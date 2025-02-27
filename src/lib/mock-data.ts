@@ -14,6 +14,7 @@ export interface Paragraph {
   id: number;
   text: string;
   isHtml?: boolean;
+  isTable?: boolean;
   changes: Change[];
 }
 
