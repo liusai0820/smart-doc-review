@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Document } from "@/lib/mock-data";
+import { Document, ChangeType, ChangeSeverity } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronRight, Clock, ListChecks, Sparkles } from "lucide-react";
+import { Clock, ListChecks, Sparkles } from "lucide-react";
 import { reviewDocumentWithLLM } from "@/lib/openrouter-api";
 import { toast } from "sonner";
 
@@ -61,7 +61,7 @@ export default function BatchReview({ documents, onReviewComplete, onClose }: Ba
         setCurrentDocId(doc.id);
         
         // 调用API审阅文档
-        const reviewResult = await reviewDocumentWithLLM(doc);
+        const result = await reviewDocumentWithLLM(doc);
         
         // 更新进度
         setProcessedCount(i + 1);
@@ -73,8 +73,20 @@ export default function BatchReview({ documents, onReviewComplete, onClose }: Ba
           updatedDocuments[docIndex] = {
             ...updatedDocuments[docIndex],
             status: "in_progress",
-            // 这里需要将reviewResult转换为paragraphs格式
-            // 但为了简化示例，我们暂时保留原格式
+            paragraphs: result.reviewContent.map((review, idx) => ({
+              ...doc.paragraphs[idx],
+              changes: review.changes.map(change => ({
+                id: Math.random().toString(36).substr(2, 9),
+                type: change.type === 'delete' ? 'deletion' : 
+                      change.type === 'insert' ? 'addition' : 
+                      change.type as ChangeType,
+                original: change.originalText,
+                new: change.newText,
+                explanation: change.explanation,
+                severity: change.severity as ChangeSeverity,
+                category: change.category || ''
+              }))
+            }))
           };
         }
         

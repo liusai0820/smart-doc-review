@@ -128,8 +128,7 @@ export async function reviewDocumentWithLLM(
               content: prompt
             }
           ],
-          temperature: 0.3,
-          max_tokens: 4000
+          temperature: 0.3
         })
       });
 
@@ -144,7 +143,7 @@ export async function reviewDocumentWithLLM(
         let errorData;
         try {
           errorData = JSON.parse(errorText);
-        } catch (e) {
+        } catch {
           errorData = { error: { message: errorText } };
         }
         
@@ -191,8 +190,8 @@ export async function reviewDocumentWithLLM(
         const result = JSON.parse(jsonContent);
         console.log('成功直接解析JSON');
         return result;
-      } catch (parseError) {
-        console.warn('直接解析JSON失败，尝试使用改进的解析器:', parseError);
+      } catch {
+        console.warn('直接解析JSON失败，尝试使用改进的解析器');
         // 如果直接解析失败，使用改进的解析器
         const result = parseRobustJSON(jsonContent);
         console.log('使用改进的解析器成功解析JSON');
@@ -226,37 +225,18 @@ export async function reviewDocumentWithLLM(
 
 // 将LLM审阅结果转换为应用内部的变更格式
 export function convertReviewToChanges(review: ReviewResult): Paragraph[] {
-  if (!review.reviewContent || !Array.isArray(review.reviewContent)) {
-    console.error("审阅结果不包含有效的reviewContent数组");
-    return [];
-  }
-  
-  return review.reviewContent.map((content, index) => {
-    if (!content.changes || !Array.isArray(content.changes)) {
-      return {
-        id: index + 1,
-        text: content.originalText || "",
-        changes: []
-      };
-    }
-    
-    return {
-      id: index + 1,
-      text: content.originalText || "",
-      changes: content.changes.map((change, changeIndex) => {
-        // 使用mapChangeType和mapSeverity来映射类型和严重程度
-        const type = mapChangeType(change.type);
-        const severity = mapSeverity(change.severity);
-
-        return {
-          id: `llm-change-${index}-${changeIndex}`,
-          type,
-          original: change.originalText || "",
-          new: change.newText || "",
-          explanation: change.explanation || "未提供说明",
-          severity
-        };
-      })
-    };
-  });
+  return review.reviewContent.map((content, index) => ({
+    id: index + 1,
+    text: content.originalText,
+    changes: content.changes.map((change, changeIndex) => ({
+      id: `change-${index}-${changeIndex}`,
+      type: mapChangeType(change.type),
+      position: change.position,
+      original: change.originalText,
+      new: change.newText,
+      explanation: change.explanation,
+      severity: mapSeverity(change.severity),
+      category: change.category
+    }))
+  }));
 }

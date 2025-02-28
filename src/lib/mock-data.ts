@@ -1,13 +1,18 @@
-export type ChangeType = 'addition' | 'deletion' | 'replace';
-export type ChangeSeverity = 'error' | 'warning' | 'info';
+export type ChangeType = 'addition' | 'deletion' | 'replace' | 'insert' | 'delete';
+export type ChangeSeverity = 'error' | 'warning' | 'info' | 'suggestion';
 
 export interface Change {
   id: string;
   type: ChangeType;
+  position?: {
+    start: number;
+    end: number;
+  };
   original?: string;
   new?: string;
   explanation: string;
   severity: ChangeSeverity;
+  category?: string;
 }
 
 export interface Paragraph {
@@ -128,7 +133,7 @@ export const mockDocuments: Document[] = [
     paragraphs: [
       {
         id: 1,
-        text: "根据用户反馈，下一版本将重点优化用户界面，提升响应速度，并新增数据分析功能。预计开发周期为3个月，将于Q2末上线。",
+        text: "根据用户反馈，下一版本将重点优化用户界面，提升响应速度，并新增数据分析功能。",
         changes: []
       },
       {

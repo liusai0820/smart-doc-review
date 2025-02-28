@@ -1,8 +1,6 @@
-import { Document, Paragraph, Change } from "@/lib/mock-data";
+import { Document, Change } from "@/lib/mock-data";
 import { saveAs } from 'file-saver';
-import mammoth from 'mammoth';
 import * as docx from 'docx';
-import { AlignmentType, Document as DocxDocument, HeadingLevel, Packer, Paragraph as DocxParagraph, TextRun } from 'docx';
 
 /**
  * 导出文档为Word格式(DOCX)
@@ -17,7 +15,7 @@ export async function exportToWord(
 ) {
   try {
     // 创建新的docx文档
-    const doc = new DocxDocument({
+    const doc = new docx.Document({
       sections: [
         {
           properties: {},
@@ -27,11 +25,10 @@ export async function exportToWord(
     });
 
     // 生成docx文件的buffer
-    const buffer = await Packer.toBuffer(doc);
+    const buffer = await docx.Packer.toBlob(doc);
     
     // 使用file-saver保存文件
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-    saveAs(blob, `${document.title}-审阅结果.docx`);
+    saveAs(buffer, `${document.title}-审阅结果.docx`);
 
     return true;
   } catch (error) {
@@ -50,10 +47,10 @@ function generateDocxContent(
 ): docx.Paragraph[] {
   // 标题部分
   const paragraphs: docx.Paragraph[] = [
-    new DocxParagraph({
+    new docx.Paragraph({
       text: document.title,
-      heading: HeadingLevel.HEADING_1,
-      alignment: AlignmentType.CENTER,
+      heading: docx.HeadingLevel.HEADING_1,
+      alignment: docx.AlignmentType.CENTER,
       spacing: {
         after: 200
       }
@@ -64,8 +61,8 @@ function generateDocxContent(
     // 只导出原始内容
     document.paragraphs.forEach(para => {
       paragraphs.push(
-        new DocxParagraph({
-          children: [new TextRun(para.text)],
+        new docx.Paragraph({
+          children: [new docx.TextRun(para.text)],
           spacing: { after: 120 }
         })
       );
@@ -97,8 +94,8 @@ function generateDocxContent(
       }
       
       paragraphs.push(
-        new DocxParagraph({
-          children: [new TextRun(text)],
+        new docx.Paragraph({
+          children: [new docx.TextRun(text)],
           spacing: { after: 120 }
         })
       );
@@ -109,8 +106,8 @@ function generateDocxContent(
       if (!para.changes || para.changes.length === 0) {
         // 无修改的段落直接添加
         paragraphs.push(
-          new DocxParagraph({
-            children: [new TextRun(para.text)],
+          new docx.Paragraph({
+            children: [new docx.TextRun(para.text)],
             spacing: { after: 120 }
           })
         );
@@ -118,8 +115,8 @@ function generateDocxContent(
       }
       
       // 处理有修改的段落
-      const textRuns: TextRun[] = [];
-      let currentText = para.text;
+      const textRuns: docx.TextRun[] = [];
+      const currentText = para.text;
       let lastEndIndex = 0;
       
       // 按位置排序变更
@@ -132,13 +129,13 @@ function generateDocxContent(
       sortedChanges.forEach(change => {
         if (change.type === 'addition' && change.new) {
           if (lastEndIndex < currentText.length) {
-            textRuns.push(new TextRun(currentText.substring(lastEndIndex)));
+            textRuns.push(new docx.TextRun({ text: currentText.substring(lastEndIndex) }));
           }
           textRuns.push(
-            new TextRun({
+            new docx.TextRun({
               text: change.new,
               color: "009900",
-              highlight: "yellow"
+              highlight: "green"
             })
           );
           lastEndIndex = currentText.length;
@@ -150,34 +147,34 @@ function generateDocxContent(
         
         // 添加修改前的文本
         if (startIndex > lastEndIndex) {
-          textRuns.push(new TextRun(currentText.substring(lastEndIndex, startIndex)));
+          textRuns.push(new docx.TextRun({ text: currentText.substring(lastEndIndex, startIndex) }));
         }
         
         const changeText = change.original || '';
         
         if (change.type === 'deletion') {
           textRuns.push(
-            new TextRun({
+            new docx.TextRun({
               text: changeText,
               strike: true,
               color: "FF0000",
-              highlight: "yellow"
+              highlight: "red"
             })
           );
         } else if (change.type === 'replace' && change.new) {
           textRuns.push(
-            new TextRun({
+            new docx.TextRun({
               text: changeText,
               strike: true,
               color: "FF0000",
-              highlight: "pink"
+              highlight: "yellow"
             })
           );
           textRuns.push(
-            new TextRun({
+            new docx.TextRun({
               text: change.new,
               color: "009900",
-              highlight: "yellow"
+              highlight: "green"
             })
           );
         }
@@ -187,11 +184,11 @@ function generateDocxContent(
       
       // 添加剩余文本
       if (lastEndIndex < currentText.length) {
-        textRuns.push(new TextRun(currentText.substring(lastEndIndex)));
+        textRuns.push(new docx.TextRun({ text: currentText.substring(lastEndIndex) }));
       }
       
       paragraphs.push(
-        new DocxParagraph({
+        new docx.Paragraph({
           children: textRuns,
           spacing: { after: 120 }
         })
@@ -201,11 +198,11 @@ function generateDocxContent(
       if (includeChanges) {
         para.changes.forEach(change => {
           paragraphs.push(
-            new DocxParagraph({
+            new docx.Paragraph({
               children: [
-                new TextRun({
+                new docx.TextRun({
                   text: `[${change.severity.toUpperCase()}] ${change.explanation}`,
-                  italic: true,
+                  italics: true,
                   color: change.severity === 'error' ? 'FF0000' : 
                          change.severity === 'warning' ? 'FF9900' : '0000FF',
                   size: 20
@@ -271,7 +268,7 @@ export function exportToHtml(document: Document, includeChanges: boolean = true)
     });
 
     sortedChanges.forEach((change) => {
-      let newParts: typeof parts = [];
+      const newParts: typeof parts = [];
 
       parts.forEach((part) => {
         if (part.change) {
@@ -303,7 +300,7 @@ export function exportToHtml(document: Document, includeChanges: boolean = true)
 
         if (change.type === 'deletion') {
           newParts.push({ text: change.original, change, type: 'deletion' });
-        } else if (change.type === 'replace') {
+        } else if (change.type === 'replace' && change.new) {
           newParts.push({ text: change.original, change, type: 'deletion' });
           newParts.push({ text: change.new || '', change, type: 'addition' });
         }
@@ -361,27 +358,7 @@ export function downloadHtml(html: string, filename: string): void {
  * 将HTML导出为PDF（前端实现）
  * 注意：这需要额外的库，如html2pdf.js或jsPDF
  */
-export function exportToPdf(document: Document, includeChanges: boolean = true): void {
-  // 这里需要使用html2pdf.js或其他PDF生成库
-  // 以下是示例代码，需要引入相应的库才能工作
-  /*
-  import html2pdf from 'html2pdf.js';
-  
-  const html = exportToHtml(document, includeChanges);
-  const element = document.createElement('div');
-  element.innerHTML = html;
-  
-  const opt = {
-    margin:       1,
-    filename:     `${document.title}-审阅结果.pdf`,
-    image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 2 },
-    jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-  };
-  
-  html2pdf().set(opt).from(element).save();
-  */
-  
-  // 由于没有引入PDF库，这里只是显示一个提示
-  alert('PDF导出功能需要额外的库支持，请先安装html2pdf.js或jsPDF');
+export function exportToPdf(document: Document): void {
+  // TODO: 实现PDF导出功能
+  console.warn('PDF导出功能尚未实现', document.title);
 }

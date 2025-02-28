@@ -122,7 +122,7 @@ export default function TemplateSelectionDialog({
               })}
               
               <p className="text-sm text-gray-500">
-                根据文档内容，我们推荐使用上述模板进行审阅。您也可以切换到"所有模板"选择其他模板。
+                根据文档内容，我们推荐使用上述模板进行审阅。您也可以切换到&quot;所有模板&quot;选择其他模板。
               </p>
             </TabsContent>
             

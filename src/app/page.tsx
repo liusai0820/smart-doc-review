@@ -300,6 +300,7 @@ export default function Home() {
                       reviewedParagraphs={aiReviewedParagraphs}
                       onAcceptChange={handleAcceptChange}
                       onRejectChange={handleRejectChange}
+                      onClose={() => setActiveTab("review")}
                     />
                   ) : (
                     <Card className="h-full flex items-center justify-center">

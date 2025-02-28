@@ -1,5 +1,5 @@
 import React from "react";
-import { Paragraph, Change } from "@/lib/mock-data";
+import { Paragraph } from "@/lib/mock-data";
 import { Check, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 

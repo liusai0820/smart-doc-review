@@ -32,7 +32,7 @@ export default function DiffView({ paragraphs }: DiffViewProps) {
           });
 
           sortedChanges.forEach((change) => {
-            let newParts: typeof parts = [];
+            const newParts: typeof parts = [];
 
             parts.forEach((part) => {
               if (part.change) {

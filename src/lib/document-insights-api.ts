@@ -109,7 +109,7 @@ export async function generateDocumentInsights(document: Document): Promise<Docu
         "X-Title": "Smart Doc Review - Insights"
       },
       body: JSON.stringify({
-        model: "google/gemini-2.0-pro-exp-02-05:free", // 可以使用不同的模型
+        model: "anthropic/claude-3.5-sonnet", // 可以使用不同的模型
         messages: [
           {
             role: "user",

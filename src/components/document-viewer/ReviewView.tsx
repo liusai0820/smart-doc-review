@@ -124,7 +124,7 @@ const EnhancedReviewView: React.FC<EnhancedReviewViewProps> = ({
     }
 
     // 处理有修改的段落
-    let content = paragraph.text;
+    const content = paragraph.text;
     const elements: JSX.Element[] = [];
     let lastIndex = 0;
     

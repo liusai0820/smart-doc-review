@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Document, Paragraph } from "@/lib/mock-data";
 import { reviewDocumentWithLLM, convertReviewToChanges } from "@/lib/openrouter-api";
-import { Sparkles, BookOpen } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import TemplateSelectionDialog from "../dialogs/TemplateSelectionDialog";
 import { generatePromptFromTemplate } from "@/lib/review-templates";
@@ -20,7 +20,6 @@ export default function ReviewButton({
 }: ReviewButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   const handleClick = () => {
     // 打开模板选择对话框
@@ -28,7 +27,6 @@ export default function ReviewButton({
   };
 
   const handleTemplateSelect = async (templateId: string) => {
-    setSelectedTemplateId(templateId);
     setIsTemplateDialogOpen(false);
     
     // 开始审阅
@@ -99,13 +97,13 @@ export default function ReviewButton({
       >
         {isLoading ? (
           <>
-            <Sparkles size={16} className="animate-spin" />
-            <span>正在审阅...</span>
+            <div className="animate-spin h-4 w-4 border-t-2 border-b-2 border-white rounded-full"></div>
+            <span>审阅中...</span>
           </>
         ) : (
           <>
-            <Sparkles size={16} />
-            <span>AI文档审阅</span>
+            <Sparkles className="h-4 w-4" />
+            <span>开始审阅</span>
           </>
         )}
       </Button>

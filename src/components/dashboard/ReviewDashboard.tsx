@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Document } from "@/lib/mock-data";
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from "recharts";
-import { AlertCircle, AlertTriangle, Info, FileCheck, FileWarning, File } from "lucide-react";
+import { AlertTriangle, FileCheck, FileWarning, FileText } from "lucide-react";
 
 interface ReviewDashboardProps {
   documents: Document[];
@@ -117,7 +117,7 @@ export default function ReviewDashboard({ documents }: ReviewDashboardProps) {
                 <p className="text-sm text-muted-foreground">总文档数</p>
                 <p className="text-2xl font-bold">{stats.totalDocuments}</p>
               </div>
-              <File className="h-8 w-8 text-gray-400" />
+              <FileText className="h-8 w-8 text-gray-400" />
             </div>
           </CardContent>
         </Card>

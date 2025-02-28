@@ -182,9 +182,9 @@ const DebugTools: React.FC<DebugToolsProps> = ({ isOpen, onClose, document }) =>
                   onChange={handleModelChange}
                   className="w-full p-2 border rounded"
                 >
-                  <option value="deepseek-ai/deepseek-coder-1.3b-instruct">DeepSeek Coder R1</option>
+                  <option value="deepseek/deepseek-r1">DeepSeek Coder R1</option>
                   <option value="google/gemini-2.0-pro-exp-02-05:free">Google Gemini 2.0 Pro</option>
-                  <option value="anthropic/claude-3-sonnet:latest">Claude 3.5 Sonnet</option>
+                  <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
                 </select>
               </div>
               

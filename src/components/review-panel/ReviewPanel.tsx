@@ -2,7 +2,7 @@ import { AlertCircle, AlertTriangle, InfoIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Document, Change } from "@/lib/mock-data";
+import { Document } from "@/lib/mock-data";
 
 interface ReviewPanelProps {
   document: Document | null;
