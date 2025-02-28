@@ -13,6 +13,11 @@ interface DebugToolsProps {
 }
 
 const DebugTools: React.FC<DebugToolsProps> = ({ isOpen, onClose, document }) => {
+  // 如果调试功能被禁用，直接返回null
+  if (process.env.NEXT_PUBLIC_ENABLE_DEBUG !== 'true') {
+    return null;
+  }
+
   const [apiResponse, setApiResponse] = useState<string>('');
   const [parsedResult, setParsedResult] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);

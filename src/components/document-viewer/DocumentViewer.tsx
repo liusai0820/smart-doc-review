@@ -144,15 +144,17 @@ export default function DocumentViewer({ document, onReviewComplete }: DocumentV
               document={aiReviewedParagraphs ? {...document, paragraphs: aiReviewedParagraphs} : document} 
               isLoading={isReviewing}
             />
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1"
-              onClick={() => setIsDebugToolsOpen(true)}
-            >
-              <Bug size={16} />
-              <span>调试</span>
-            </Button>
+            {process.env.NEXT_PUBLIC_ENABLE_DEBUG === 'true' && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                onClick={() => setIsDebugToolsOpen(true)}
+              >
+                <Bug size={16} />
+                <span>调试</span>
+              </Button>
+            )}
             <div className="flex gap-2">
               <span className="badge-error">错误 {errorCount}</span>
               <span className="badge-warning">警告 {warningCount}</span>
