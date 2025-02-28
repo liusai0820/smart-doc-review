@@ -1,6 +1,6 @@
 import { Document, Paragraph, ChangeType, ChangeSeverity } from "./mock-data";
 import { generateEnhancedReviewPrompt } from "./prompts/enhanced-review-prompt";
-import { parseRobustJSON } from "./improved-json-parser";
+import { enqueueApiRequest } from "./api-queue";
 
 // 审阅结果接口
 export interface ReviewResult {
@@ -51,6 +51,62 @@ function mapChangeType(type: string): ChangeType {
   }
 }
 
+// 定义API响应的接口
+interface ReviewSuggestion {
+  type: 'replace' | 'insert' | 'delete';
+  position: { start: number; end: number };
+  originalText: string;
+  newText: string;
+  explanation: string;
+  severity: 'error' | 'warning' | 'suggestion';
+  category: string;
+}
+
+interface ReviewContent {
+  id: string;
+  originalText: string;
+  changes: ReviewSuggestion[];
+}
+
+interface ApiResponse {
+  documentInfo?: {
+    title: string;
+    overview: string;
+    totalIssues: { errors: number; warnings: number; suggestions: number };
+  };
+  reviewContent?: Array<{
+    id?: string;
+    originalText?: string;
+    changes?: Array<{
+      type?: string;
+      position?: { start: number; end: number };
+      originalText?: string;
+      newText?: string;
+      explanation?: string;
+      severity?: string;
+      category?: string;
+    }>;
+  }>;
+  changes?: Array<{
+    type?: string;
+    position?: { start: number; end: number };
+    originalText?: string;
+    newText?: string;
+    explanation?: string;
+    severity?: string;
+    category?: string;
+  }>;
+  suggestions?: Array<{
+    type?: string;
+    position?: { start: number; end: number };
+    originalText?: string;
+    newText?: string;
+    explanation?: string;
+    severity?: string;
+    category?: string;
+  }>;
+}
+
 export async function reviewDocumentWithLLM(
   document: Document,
   apiKey?: string,
@@ -69,189 +125,35 @@ export async function reviewDocumentWithLLM(
 
     // 生成审阅提示词
     const prompt = customPrompt || generateEnhancedReviewPrompt(document.title, paragraphTexts);
-    console.log('生成的提示词长度:', prompt.length);
-
-    // 使用传入的API密钥和模型名称，如果没有则使用环境变量
-    const effectiveApiKey = apiKey || process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || '';
     
-    // 获取模型名称的优先级：
-    // 1. 传入的modelName参数
-    // 2. localStorage中存储的值
-    // 3. 环境变量
-    // 4. 默认值
-    let effectiveModelName = modelName;
-    if (!effectiveModelName && typeof window !== 'undefined') {
-      effectiveModelName = localStorage.getItem('llm_model') || '';
-    }
-    if (!effectiveModelName) {
-      effectiveModelName = process.env.NEXT_PUBLIC_LLM_MODEL || "google/gemini-2.0-pro-exp-02-05:free";
-    }
+    // 使用队列系统发送请求
+    console.log('发送API请求...');
+    const result = await enqueueApiRequest(document, apiKey, modelName, prompt);
     
-    // 添加更多日志信息以便调试
-    console.log('模型选择过程:', {
-      passedModel: modelName,
-      localStorageModel: typeof window !== 'undefined' ? localStorage.getItem('llm_model') : null,
-      envModel: process.env.NEXT_PUBLIC_LLM_MODEL,
-      finalModel: effectiveModelName
+    console.log('原始API响应:', result);
+    
+    // 验证和规范化API响应
+    const normalizedResult = normalizeApiResponse(result, document);
+    
+    console.log('规范化后的响应:', {
+      hasDocumentInfo: !!normalizedResult.documentInfo,
+      reviewContentCount: normalizedResult.reviewContent?.length || 0,
+      contentDetails: normalizedResult.reviewContent?.map(content => ({
+        hasOriginalText: !!content.originalText,
+        changesCount: content.changes?.length || 0
+      }))
     });
     
-    // 调用OpenRouter API
-    try {
-      console.log('准备发送请求到OpenRouter API:', {
-        model: effectiveModelName,
-        promptLength: prompt.length,
-        hasApiKey: !!effectiveApiKey
-      });
-
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${effectiveApiKey}`,
-          "HTTP-Referer": window.location.origin,
-          "X-Title": "Smart Doc Review"
-        },
-        body: JSON.stringify({
-          model: effectiveModelName,
-          messages: [
-            {
-              role: "system",
-              content: `你是一个专业的文档审阅助手。请以JSON格式返回审阅结果，包含文档信息和具体的修改建议。
-注意：
-1. 返回的JSON中不要包含任何HTML或XML标签
-2. 所有文本内容应该是纯文本格式
-3. 如果需要强调某些内容，请使用其他方式，而不是标签
-4. 确保JSON格式严格符合规范`
-            },
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
-          temperature: 0.3
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API响应不成功:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorText
-        });
-        
-        let errorData;
-        try {
-          errorData = JSON.parse(errorText);
-        } catch {
-          errorData = { error: { message: errorText } };
-        }
-        
-        throw new Error(`API调用失败: ${errorData.error?.message || response.statusText}`);
-      }
-
-      console.log('API响应成功，正在解析响应数据');
-      const data = await response.json();
-      
-      if (data.error) {
-        console.error('API返回错误对象:', data.error);
-        throw new Error(`API返回错误: ${data.error.message}`);
-      }
-
-      // 获取API返回的内容并进行预处理
-      let jsonContent = data.choices[0].message.content;
-      
-      // 清理JSON字符串中的特殊字符和HTML/XML标签
-      jsonContent = jsonContent
-        .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // 移除控制字符
-        .replace(/\n/g, ' ') // 将换行符替换为空格
-        .replace(/<[^>]*>/g, '') // 移除所有HTML/XML标签
-        .trim(); // 移除首尾空白
-
-/**
- * 增强变更位置信息，确保每个变更都有精确的position
- */
-function enhanceChangeLocations(reviewResult: ReviewResult): ReviewResult {
-  return {
-    ...reviewResult,
-    reviewContent: reviewResult.reviewContent.map(content => {
-      return {
-        ...content,
-        changes: content.changes.map(change => {
-          // 如果API已经提供了完整的position信息，直接使用
-          if (change.position && 
-              typeof change.position.start === 'number' && 
-              typeof change.position.end === 'number') {
-            return change;
-          }
-          
-          // 如果没有完整position信息但有originalText，尝试计算
-          if (change.originalText) {
-            const start = content.originalText.indexOf(change.originalText);
-            if (start !== -1) {
-              return {
-                ...change,
-                position: {
-                  start,
-                  end: start + change.originalText.length
-                }
-              };
-            }
-          }
-          
-          // 无法确定精确位置，返回原始变更
-          return change;
-        })
-      };
-    })
-  };
-}
-      // 尝试找到JSON的实际开始位置
-      const jsonStart = jsonContent.indexOf('{');
-      if (jsonStart !== -1) {
-        jsonContent = jsonContent.substring(jsonStart);
-      }
-      
-      // 尝试找到JSON的实际结束位置
-      const jsonEnd = jsonContent.lastIndexOf('}');
-      if (jsonEnd !== -1) {
-        jsonContent = jsonContent.substring(0, jsonEnd + 1);
-      }
-
-      console.log('清理后的JSON内容:', {
-        contentLength: jsonContent.length,
-        contentPreview: jsonContent.substring(0, 100) + '...'
-      });
-      
-      try {
-        // 首先尝试直接解析
-        const result = JSON.parse(jsonContent);
-        console.log('成功直接解析JSON');
-        return result;
-      } catch {
-        console.warn('直接解析JSON失败，尝试使用改进的解析器');
-        // 如果直接解析失败，使用改进的解析器
-        const result = parseRobustJSON(jsonContent);
-        console.log('使用改进的解析器成功解析JSON');
-        return result;
-
-        const enhancedResult = enhanceChangeLocations(result);
-        console.log('已增强位置信息的API结果');
-        return enhancedResult;
-      }
-    } catch (apiError) {
-      console.error("API调用或解析失败:", apiError);
-      
-      // 提供更详细的错误信息
-      if (apiError instanceof Error) {
-        console.error(`错误类型: ${apiError.name}, 错误消息: ${apiError.message}`);
-        if (apiError.stack) {
-          console.error(`错误堆栈: ${apiError.stack}`);
-        }
-      }
-      
-      throw apiError;
-    }
+    // 增强位置信息
+    console.log('开始增强位置信息...');
+    const enhancedResult = enhanceChangeLocations(normalizedResult);
+    console.log('位置信息增强完成:', {
+      reviewContentCount: enhancedResult.reviewContent.length,
+      hasChanges: enhancedResult.reviewContent.some(content => content.changes?.length > 0)
+    });
+    
+    return enhancedResult;
+    
   } catch (error) {
     console.error("LLM审阅失败:", error);
     return {
@@ -262,6 +164,162 @@ function enhanceChangeLocations(reviewResult: ReviewResult): ReviewResult {
       },
       reviewContent: []
     };
+  }
+}
+
+/**
+ * 规范化API响应，确保数据结构完整
+ */
+function normalizeApiResponse(result: ApiResponse, document: Document): ReviewResult {
+  // 如果没有文档信息，创建默认值
+  const documentInfo = {
+    title: result.documentInfo?.title || document.title,
+    overview: result.documentInfo?.overview || "文档审阅完成",
+    totalIssues: result.documentInfo?.totalIssues || { errors: 0, warnings: 0, suggestions: 0 }
+  };
+
+  // 确保reviewContent是数组
+  let normalizedContent: ReviewContent[] = [];
+
+  if (!Array.isArray(result.reviewContent)) {
+    // 如果reviewContent不是数组，尝试将整个响应转换为正确的格式
+    console.warn('响应格式不规范，尝试修正...');
+    
+    // 创建一个新的reviewContent数组
+    normalizedContent = document.paragraphs.map((paragraph, index) => {
+      return {
+        id: String(index + 1),
+        originalText: paragraph.text,
+        changes: []
+      };
+    });
+
+    // 尝试从响应中提取变更信息
+    try {
+      if (result.changes && result.changes.length > 0) {
+        // 如果响应中直接包含changes数组
+        normalizedContent[0].changes = result.changes.map(change => ({
+          type: (change.type as 'replace' | 'insert' | 'delete') || 'replace',
+          position: change.position || { start: 0, end: 0 },
+          originalText: change.originalText || '',
+          newText: change.newText || '',
+          explanation: change.explanation || '建议修改',
+          severity: (change.severity as 'error' | 'warning' | 'suggestion') || 'suggestion',
+          category: change.category || '通用'
+        }));
+      } else if (result.suggestions && result.suggestions.length > 0) {
+        // 如果响应使用了不同的字段名
+        normalizedContent[0].changes = result.suggestions.map(suggestion => ({
+          type: (suggestion.type as 'replace' | 'insert' | 'delete') || 'replace',
+          position: suggestion.position || { start: 0, end: 0 },
+          originalText: suggestion.originalText || '',
+          newText: suggestion.newText || '',
+          explanation: suggestion.explanation || '建议修改',
+          severity: (suggestion.severity as 'error' | 'warning' | 'suggestion') || 'suggestion',
+          category: suggestion.category || '通用'
+        }));
+      }
+    } catch (error) {
+      console.error('转换变更信息时出错:', error);
+    }
+  } else {
+    // 确保每个content都有必要的字段
+    normalizedContent = result.reviewContent.map((content, index) => {
+      return {
+        id: content.id || String(index + 1),
+        originalText: content.originalText || document.paragraphs[index]?.text || '',
+        changes: Array.isArray(content.changes) ? content.changes.map(change => ({
+          type: (change.type as 'replace' | 'insert' | 'delete') || 'replace',
+          position: change.position || { start: 0, end: 0 },
+          originalText: change.originalText || '',
+          newText: change.newText || '',
+          explanation: change.explanation || '建议修改',
+          severity: (change.severity as 'error' | 'warning' | 'suggestion') || 'suggestion',
+          category: change.category || '通用'
+        })) : []
+      };
+    });
+  }
+
+  return {
+    documentInfo,
+    reviewContent: normalizedContent
+  };
+}
+
+/**
+ * 增强变更位置信息，确保每个变更都有精确的position
+ */
+function enhanceChangeLocations(reviewResult: ReviewResult): ReviewResult {
+  try {
+    if (!reviewResult.reviewContent) {
+      console.error('无效的reviewResult:', reviewResult);
+      throw new Error('reviewContent为空');
+    }
+
+    const enhanced = {
+      ...reviewResult,
+      reviewContent: reviewResult.reviewContent.map((content, contentIndex) => {
+        console.log(`处理第 ${contentIndex + 1} 个内容块...`);
+        
+        if (!content.changes) {
+          console.warn(`内容块 ${contentIndex + 1} 没有changes数组`);
+          return { ...content, changes: [] };
+        }
+
+        return {
+          ...content,
+          changes: content.changes.map((change, changeIndex) => {
+            try {
+              // 如果API已经提供了完整的position信息，直接使用
+              if (change.position && 
+                  typeof change.position.start === 'number' && 
+                  typeof change.position.end === 'number') {
+                return change;
+              }
+              
+              // 如果没有完整position信息但有originalText，尝试计算
+              if (change.originalText && content.originalText) {
+                // 清理文本，移除多余的空格
+                const cleanOriginalText = change.originalText.trim().replace(/\s+/g, ' ');
+                const cleanContentText = content.originalText.trim().replace(/\s+/g, ' ');
+                
+                const start = cleanContentText.indexOf(cleanOriginalText);
+                if (start !== -1) {
+                  return {
+                    ...change,
+                    position: {
+                      start,
+                      end: start + cleanOriginalText.length
+                    }
+                  };
+                }
+              }
+              
+              console.warn(`无法为变更 ${changeIndex + 1} 找到位置信息:`, {
+                hasOriginalText: !!change.originalText,
+                hasContentText: !!content.originalText
+              });
+              
+              // 无法确定精确位置，返回带默认位置的变更
+              return {
+                ...change,
+                position: { start: 0, end: 0 }
+              };
+            } catch (error) {
+              console.error(`处理变更 ${changeIndex + 1} 时出错:`, error);
+              return change;
+            }
+          })
+        };
+      })
+    };
+
+    console.log('位置信息增强完成');
+    return enhanced;
+  } catch (error) {
+    console.error('增强位置信息时出错:', error);
+    return reviewResult;
   }
 }
 
