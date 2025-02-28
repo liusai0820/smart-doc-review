@@ -1,6 +1,7 @@
 export type ChangeType = 'addition' | 'deletion' | 'replace' | 'insert' | 'delete';
 export type ChangeSeverity = 'error' | 'warning' | 'info' | 'suggestion';
 
+// src/lib/mock-data.ts
 export interface Change {
   id: string;
   type: ChangeType;
@@ -30,6 +31,7 @@ export interface Document {
   status: "pending" | "in_progress" | "completed";
   paragraphs: Paragraph[];
   fileUrl?: string;
+  content?: ArrayBuffer;
 }
 
 export const mockDocuments: Document[] = [
@@ -157,6 +159,7 @@ export const mockDocuments: Document[] = [
     title: "产品开发规划",
     date: "2024-02-10",
     status: "pending",
+    fileUrl: "/samples/sample-doc.txt",
     paragraphs: [
       {
         id: 1,
@@ -168,7 +171,6 @@ export const mockDocuments: Document[] = [
         text: "预计开发周期为3个月，将在5月份发布测试版，7月正式上线。",
         changes: []
       }
-    ],
-    fileUrl: "/samples/sample-doc.txt" // 使用文本文件作为示例
+    ]
   }
 ];

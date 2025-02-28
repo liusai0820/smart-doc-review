@@ -1,18 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { FileText, History, Settings, BarChart } from "lucide-react";
+import { useState, useRef } from "react";
+import { FileText, History, Settings, BarChart, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import DocumentList from "@/components/document-list/DocumentList";
 import DocumentViewer from "@/components/document-viewer/DocumentViewer";
-import DocumentInsights from "@/components/document-insights/DocumentInsights";
+import DocumentInsights, { DocumentInsightsRef } from "@/components/document-insights/DocumentInsights";
 import { mockDocuments } from "@/lib/mock-data";
 import { Document } from "@/lib/mock-data";
 import HistoryModal from "@/components/ui/HistoryModal";
 import SettingsModal from "@/components/ui/SettingsModal";
 import Notification from "@/components/ui/Notification";
-import mammoth from "mammoth";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import ChangesComparisonView from "@/components/document-viewer/ChangesComparisonView";
 import ReviewDashboard from "@/components/dashboard/ReviewDashboard";
@@ -28,6 +27,8 @@ export default function Home() {
     type: "success" | "error" | "info";
   } | null>(null);
   const [aiReviewedParagraphs, setAiReviewedParagraphs] = useState<Document["paragraphs"] | null>(null);
+  const insightsRef = useRef<DocumentInsightsRef>(null);
+  const [documentTab, setDocumentTab] = useState("view");
 
   const handleSelectDocument = (document: Document) => {
     setSelectedDocument(document);
@@ -40,38 +41,27 @@ export default function Home() {
 
   const parseDocumentContent = async (fileContent: ArrayBuffer, fileName: string) => {
     try {
-      let html = "";
-      console.log(`开始解析文件: ${fileName}`);
+      console.log(`开始解析文件: ${fileName}`, {
+        fileSize: fileContent.byteLength,
+        fileType: fileName.split('.').pop()?.toLowerCase()
+      });
       
-      if (fileName.endsWith('.docx')) {
-        // 增加错误处理和日志
-        try {
-          // 使用 mammoth 转换为 HTML
-          const result = await mammoth.convertToHtml({ arrayBuffer: fileContent });
-          html = result.value;
-          console.log("Mammoth转换成功");
-        } catch (mammothError) {
-          console.error("Mammoth转换失败:", mammothError);
-          throw mammothError;
-        }
-  
-        // 将 HTML 分割成段落
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        
-        const paragraphs = Array.from(tempDiv.children).map((element, index) => {
-          const isTable = element.tagName.toLowerCase() === 'table';
-          return {
-            id: index + 1,
-            text: element.outerHTML,
-            isHtml: true,
-            isTable,
-            changes: []
-          };
-        });
-  
-        return paragraphs;
-      } else if (fileName.endsWith('.txt')) {
+      if (fileName.toLowerCase().endsWith('.docx')) {
+        console.log('处理 DOCX 文件');
+        return {
+          paragraphs: [{
+            id: Date.now(),
+            text: fileName,
+            isHtml: false,
+            isTable: false,
+            changes: [],
+            severity: 0
+          }],
+          fileUrl: undefined,
+          content: fileContent
+        };
+      } else if (fileName.toLowerCase().endsWith('.txt')) {
+        console.log('处理 TXT 文件');
         // 解析 TXT 文件
         const decoder = new TextDecoder('utf-8');
         const text = decoder.decode(fileContent);
@@ -79,15 +69,21 @@ export default function Home() {
           .filter(p => p.trim())
           .map((p, index) => ({
             id: index + 1,
-            text: `<p class="doc-paragraph">${p.trim()}</p>`,
-            isHtml: true,
+            text: p.trim(),
+            isHtml: false,
             isTable: false,
             changes: []
           }));
-  
-        return paragraphs;
+
+        console.log(`解析出 ${paragraphs.length} 个段落`);
+
+        return {
+          paragraphs,
+          fileUrl: undefined,
+          content: undefined
+        };
       }
-  
+
       throw new Error('不支持的文件格式');
     } catch (err) {
       console.error('解析文档失败:', err);
@@ -97,6 +93,7 @@ export default function Home() {
 
   const handleUploadComplete = async (fileName: string, fileContent?: ArrayBuffer, fileUrl?: string) => {
     if (!fileContent) {
+      console.log('文件内容为空');
       setNotification({
         message: "文件内容为空",
         type: "error"
@@ -105,8 +102,21 @@ export default function Home() {
     }
 
     try {
+      console.log('开始处理上传文件:', {
+        fileName,
+        fileSize: fileContent.byteLength,
+        hasFileUrl: !!fileUrl
+      });
+      
       // 解析文档内容
-      const paragraphs = await parseDocumentContent(fileContent, fileName);
+      const { paragraphs, fileUrl: docUrl, content } = await parseDocumentContent(fileContent, fileName);
+
+      console.log('文档解析结果:', {
+        hasParagraphs: paragraphs.length > 0,
+        hasDocUrl: !!docUrl,
+        hasContent: !!content,
+        contentSize: content?.byteLength
+      });
 
       // 创建新文档
       const newDocument = {
@@ -115,15 +125,25 @@ export default function Home() {
         date: new Date().toISOString().split("T")[0],
         status: "pending" as const,
         paragraphs,
-        fileUrl: fileUrl || undefined
+        fileUrl: docUrl || fileUrl,
+        content // 保存原始内容
       };
 
-      // 添加到文档列表
-      const updatedDocuments = [newDocument, ...documents];
-      setDocuments(updatedDocuments);
+      console.log('创建新文档:', {
+        id: newDocument.id,
+        title: newDocument.title,
+        hasFileUrl: !!newDocument.fileUrl,
+        hasContent: !!newDocument.content,
+        contentSize: newDocument.content?.byteLength
+      });
+
+      // 先更新文档列表
+      setDocuments(prev => [newDocument, ...prev]);
       
-      // 自动选择新上传的文档
-      setSelectedDocument(newDocument);
+      // 然后设置选中的文档
+      setTimeout(() => {
+        setSelectedDocument(newDocument);
+      }, 0);
       
       // 显示成功通知
       setNotification({
@@ -156,6 +176,12 @@ export default function Home() {
       });
       setDocuments(updatedDocuments);
     }
+  };
+
+  // 处理审阅开始
+  const handleReviewStart = () => {
+    // 同时触发文档分析
+    insightsRef.current?.startAnalysis();
   };
 
   // 处理接受变更
@@ -270,7 +296,13 @@ export default function Home() {
         <TabsContent value="review" className="flex-1">
           <div className="flex-1 grid grid-cols-12 min-w-[1280px] p-6 gap-6">
             {/* 左侧文档列表 */}
-            <div className="col-span-2">
+            <div className="col-span-3">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-blue-500" />
+                  文档列表
+                </h2>
+              </div>
               <DocumentList 
                 documents={documents} 
                 selectedDocument={selectedDocument}
@@ -281,8 +313,14 @@ export default function Home() {
             </div>
 
             {/* 中间文档查看器 */}
-            <div className="col-span-7">
-              <Tabs defaultValue="view" className="w-full">
+            <div className="col-span-6">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-blue-500" />
+                  文档内容
+                </h2>
+              </div>
+              <Tabs value={documentTab} onValueChange={setDocumentTab} className="w-full">
                 <TabsList className="mb-4">
                   <TabsTrigger value="view">文档视图</TabsTrigger>
                   <TabsTrigger value="compare">变更对比</TabsTrigger>
@@ -290,18 +328,36 @@ export default function Home() {
                 <TabsContent value="view" className="mt-0">
                   <DocumentViewer 
                     document={selectedDocument} 
+                    onReviewStart={handleReviewStart}
                     onReviewComplete={handleReviewComplete}
                   />
                 </TabsContent>
                 <TabsContent value="compare" className="mt-0">
                   {selectedDocument && aiReviewedParagraphs ? (
-                    <ChangesComparisonView 
-                      document={selectedDocument}
-                      reviewedParagraphs={aiReviewedParagraphs}
-                      onAcceptChange={handleAcceptChange}
-                      onRejectChange={handleRejectChange}
-                      onClose={() => setActiveTab("review")}
-                    />
+                    <Card className="h-full">
+                      <CardHeader className="pb-3">
+                        <div className="flex justify-between items-center">
+                          <CardTitle className="text-lg">变更对比</CardTitle>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="flex gap-1" 
+                            onClick={() => setDocumentTab("view")}
+                          >
+                            <X size={16} />
+                            <span>关闭</span>
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <ChangesComparisonView 
+                          document={selectedDocument}
+                          reviewedParagraphs={aiReviewedParagraphs}
+                          onAcceptChange={handleAcceptChange}
+                          onRejectChange={handleRejectChange}
+                        />
+                      </CardContent>
+                    </Card>
                   ) : (
                     <Card className="h-full flex items-center justify-center">
                       <div className="text-center p-6">
@@ -315,7 +371,16 @@ export default function Home() {
 
             {/* 右侧文档洞察面板 */}
             <div className="col-span-3">
-              <DocumentInsights document={selectedDocument} />
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                  <BarChart className="h-5 w-5 text-blue-500" />
+                  文档分析
+                </h2>
+              </div>
+              <DocumentInsights 
+                ref={insightsRef}
+                document={selectedDocument} 
+              />
             </div>
           </div>
         </TabsContent>

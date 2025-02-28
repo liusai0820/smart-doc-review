@@ -90,7 +90,7 @@ export default function ReviewButton({
     <>
       <Button
         onClick={handleClick}
-        className="bg-accent hover:bg-accent/90 text-white font-medium flex items-center gap-1 shadow-sm"
+        className="bg-blue-500 hover:bg-blue-600 text-white font-medium flex items-center gap-1 shadow-sm"
         variant="default"
         size="sm"
         disabled={isLoading}
@@ -99,6 +99,11 @@ export default function ReviewButton({
           <>
             <div className="animate-spin h-4 w-4 border-t-2 border-b-2 border-white rounded-full"></div>
             <span>审阅中...</span>
+          </>
+        ) : !document ? (
+          <>
+            <Sparkles className="h-4 w-4" />
+            <span>请先选择文档</span>
           </>
         ) : (
           <>

@@ -48,6 +48,12 @@ const TrackChangesView: React.FC<TrackChangesViewProps> = ({
                     <div className="text-sm text-green-600 mb-1">{change.new}</div>
                   </>
                 )}
+                {change.position && (
+                  <span className="text-xs text-gray-500 ml-2">
+                    位置: {change.position.start}-{change.position.end}
+                  </span>
+                )}
+
                 <div className="text-xs text-gray-600">{change.explanation}</div>
               </div>
               

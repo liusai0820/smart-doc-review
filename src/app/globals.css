@@ -244,4 +244,61 @@
   .suggestion-new {
     @apply text-sm text-green-600;
   }
+
+  /* DocViewer 样式 */
+  .docx-viewer {
+    background: white;
+    padding: 13px;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  .docx-viewer .document-container {
+    padding: 13px;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+    margin: 0 auto;
+    max-width: 100%;
+  }
+
+  .docx-viewer .document-container > div {
+    margin: 0 auto;
+    max-width: 100%;
+  }
+
+  .docx-viewer table {
+    border-collapse: collapse;
+    margin: 15px 0;
+  }
+
+  .docx-viewer table td,
+  .docx-viewer table th {
+    border: 1px solid #ddd;
+    padding: 8px;
+  }
+
+  .docx-viewer img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .docx-viewer p {
+    margin: 0 0 1em;
+    line-height: 1.5;
+  }
+
+  /* 确保页面分隔符正确显示 */
+  .docx-viewer .page-break {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  /* 添加打印样式支持 */
+  @media print {
+    .docx-viewer {
+      padding: 0;
+    }
+    
+    .docx-viewer .document-container {
+      box-shadow: none;
+    }
+  }
 }

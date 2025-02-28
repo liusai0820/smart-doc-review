@@ -167,7 +167,45 @@ export async function reviewDocumentWithLLM(
         .replace(/\n/g, ' ') // 将换行符替换为空格
         .replace(/<[^>]*>/g, '') // 移除所有HTML/XML标签
         .trim(); // 移除首尾空白
-      
+
+/**
+ * 增强变更位置信息，确保每个变更都有精确的position
+ */
+function enhanceChangeLocations(reviewResult: ReviewResult): ReviewResult {
+  return {
+    ...reviewResult,
+    reviewContent: reviewResult.reviewContent.map(content => {
+      return {
+        ...content,
+        changes: content.changes.map(change => {
+          // 如果API已经提供了完整的position信息，直接使用
+          if (change.position && 
+              typeof change.position.start === 'number' && 
+              typeof change.position.end === 'number') {
+            return change;
+          }
+          
+          // 如果没有完整position信息但有originalText，尝试计算
+          if (change.originalText) {
+            const start = content.originalText.indexOf(change.originalText);
+            if (start !== -1) {
+              return {
+                ...change,
+                position: {
+                  start,
+                  end: start + change.originalText.length
+                }
+              };
+            }
+          }
+          
+          // 无法确定精确位置，返回原始变更
+          return change;
+        })
+      };
+    })
+  };
+}
       // 尝试找到JSON的实际开始位置
       const jsonStart = jsonContent.indexOf('{');
       if (jsonStart !== -1) {
@@ -196,6 +234,10 @@ export async function reviewDocumentWithLLM(
         const result = parseRobustJSON(jsonContent);
         console.log('使用改进的解析器成功解析JSON');
         return result;
+
+        const enhancedResult = enhanceChangeLocations(result);
+        console.log('已增强位置信息的API结果');
+        return enhancedResult;
       }
     } catch (apiError) {
       console.error("API调用或解析失败:", apiError);

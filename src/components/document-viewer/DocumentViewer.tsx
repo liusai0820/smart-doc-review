@@ -1,12 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MessageSquare, FileText, Bug, FileX } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Document, Paragraph } from "@/lib/mock-data";
-import OriginalView from "./OriginalView";
-import EnhancedReviewView from "./ReviewView";
-import TrackChangesView from "./TrackChangesView";
+import DocViewer from "./DocViewer";
+import ChangesView from "./ChangesView";
 import ReviewButton from "../ui/ReviewButton";
 import ExportButton from "../ui/ExportButton";
 import DebugTools from "../ui/DebugTools";
@@ -14,21 +13,35 @@ import { toast } from "sonner";
 
 interface DocumentViewerProps {
   document: Document | null;
+  onReviewStart?: () => void;
   onReviewComplete?: (paragraphs: Paragraph[]) => void;
 }
 
-export default function DocumentViewer({ document, onReviewComplete }: DocumentViewerProps) {
+export default function DocumentViewer({ 
+  document, 
+  onReviewStart,
+  onReviewComplete 
+}: DocumentViewerProps) {
   const [isReviewing, setIsReviewing] = useState(false);
   const [aiReviewedParagraphs, setAiReviewedParagraphs] = useState<Paragraph[] | null>(null);
-  const [activeTab, setActiveTab] = useState("review");
+  const [activeTab, setActiveTab] = useState("original");
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [isDebugToolsOpen, setIsDebugToolsOpen] = useState(false);
+
+  // 当文档变更时重置状态
+  useEffect(() => {
+    setActiveTab("original");
+    setIsReviewing(false);
+    setAiReviewedParagraphs(null);
+    setReviewError(null);
+  }, [document?.id]);  // 只在文档 ID 变化时重置
 
   // 处理AI审阅开始
   const handleReviewStart = () => {
     setIsReviewing(true);
     setAiReviewedParagraphs(null);
     setReviewError(null);
+    onReviewStart?.();
   };
 
   // 处理AI审阅完成
@@ -167,39 +180,23 @@ export default function DocumentViewer({ document, onReviewComplete }: DocumentV
       </CardHeader>
       <CardContent>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="review">审阅视图</TabsTrigger>
-            <TabsTrigger value="original">原文</TabsTrigger>
-            <TabsTrigger value="track">变更追踪</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="original">原文视图</TabsTrigger>
+            <TabsTrigger value="changes">变更视图</TabsTrigger>
           </TabsList>
           <TabsContent value="original">
-            <OriginalView paragraphs={document.paragraphs} />
-          </TabsContent>
-          <TabsContent value="review">
-            {isReviewing ? (
-              <div className="flex flex-col items-center justify-center h-[calc(100vh-260px)] space-y-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-                <p className="text-gray-500">AI 正在分析文档...</p>
-              </div>
-            ) : reviewError ? (
-              <div className="flex flex-col items-center justify-center h-[calc(100vh-260px)] space-y-4">
-                <div className="text-red-500">{reviewError}</div>
-                <button 
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded text-sm"
-                  onClick={() => setReviewError(null)}
-                >
-                  重试
-                </button>
-              </div>
-            ) : (
-              <EnhancedReviewView 
-                paragraphs={aiReviewedParagraphs || document.paragraphs}
-                onAcceptChange={handleAcceptChange}
-                onRejectChange={handleRejectChange}
+            {document.content || document.fileUrl ? (
+              <DocViewer 
+                fileUrl={document.fileUrl} 
+                content={document.content}
               />
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                无法预览文档，未找到文件内容或URL
+              </div>
             )}
           </TabsContent>
-          <TabsContent value="track">
+          <TabsContent value="changes">
             {isReviewing ? (
               <div className="flex flex-col items-center justify-center h-[calc(100vh-260px)] space-y-4">
                 <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
@@ -216,7 +213,7 @@ export default function DocumentViewer({ document, onReviewComplete }: DocumentV
                 </button>
               </div>
             ) : (
-              <TrackChangesView 
+              <ChangesView 
                 paragraphs={aiReviewedParagraphs || document.paragraphs}
                 onAcceptChange={handleAcceptChange}
                 onRejectChange={handleRejectChange}

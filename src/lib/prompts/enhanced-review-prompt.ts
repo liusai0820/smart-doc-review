@@ -14,6 +14,12 @@ export const enhancedReviewPromptTemplate = `
 - 警告(warning)：应当修改的问题，包括不精确的表述、次要逻辑问题、格式不一致
 - 建议(suggestion)：可以改进的地方，包括表达优化、结构调整建议
 
+### 精确定位要求（非常重要）
+在标识需要修改的内容时，请务必：
+1. 仅标记真正需要修改的特定词语、短语或句子，不要标记整段内容
+2. 提供精确的position对象，包含需修改内容在原文中的确切起始位置(start)和结束位置(end)
+3. 每处修改必须附带明确解释，说明为什么需要修改及如何改进
+
 ### 输出格式
 {
   "documentInfo": {
@@ -33,10 +39,10 @@ export const enhancedReviewPromptTemplate = `
         {
           "type": "replace" | "insert" | "delete",  // 修改类型
           "position": {
-            "start": number,  // 起始位置
-            "end": number     // 结束位置
+            "start": number,  // 起始位置（字符索引）
+            "end": number     // 结束位置（字符索引）
           },
-          "originalText": string,  // 需要修改的文本
+          "originalText": string,  // 需要修改的文本（仅包含真正需要修改的部分，不是整段）
           "newText": string,       // 新文本
           "explanation": string,   // 修改理由（中文）
           "severity": "error" | "warning" | "suggestion", // 严重程度
@@ -46,22 +52,6 @@ export const enhancedReviewPromptTemplate = `
     }
   ]
 }
-
-### 报告审阅细则
-1. 技术性报告需重点关注：
-   - 技术描述是否准确（如量子计算、人工智能、生物技术等领域的专业术语）
-   - 技术指标与行业标准对比是否合理
-   - 技术发展趋势判断是否有依据
-
-2. 业务/项目报告需重点关注：
-   - 业务数据一致性（如增长率、市场份额等）
-   - 财务数据准确性（如成本估算、投资回报率、利润预测）
-   - 项目计划可行性（时间线、资源分配、风险评估）
-
-3. 研究报告需重点关注：
-   - 研究方法合理性
-   - 数据分析完整性
-   - 结论是否有充分证据支持
 
 ### 审阅要求
 - 所有内容必须用中文表达（除非原文中的专业术语或英文缩写）
