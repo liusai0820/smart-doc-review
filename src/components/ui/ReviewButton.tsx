@@ -90,7 +90,7 @@ export default function ReviewButton({
     <>
       <Button
         onClick={handleClick}
-        className="flex items-center gap-1"
+        className="bg-accent hover:bg-accent/90 text-white font-medium flex items-center gap-1 shadow-sm"
         variant="default"
         size="sm"
         disabled={isLoading}

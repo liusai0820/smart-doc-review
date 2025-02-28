@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageSquare, FileText, Bug } from "lucide-react";
+import { MessageSquare, FileText, Bug, FileX } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -112,9 +112,11 @@ export default function DocumentViewer({ document, onReviewComplete }: DocumentV
   
   if (!document) {
     return (
-      <Card className="h-full flex items-center justify-center">
-        <div className="text-center p-6">
-          <p className="text-gray-500">请从左侧选择一个文档进行查看</p>
+      <Card className="h-full">
+        <div className="empty-state">
+          <FileX className="empty-state-icon" />
+          <h3 className="empty-state-title">暂无文档</h3>
+          <p className="empty-state-description">请从左侧选择一个文档或上传新文档</p>
         </div>
       </Card>
     );
@@ -130,7 +132,7 @@ export default function DocumentViewer({ document, onReviewComplete }: DocumentV
     <Card className="h-full">
       <CardHeader className="pb-3">
         <div className="flex justify-between items-center">
-          <CardTitle className="text-xl font-bold flex items-center gap-2">
+          <CardTitle className="text-xl font-bold text-gray-800 tracking-wide flex items-center gap-2">
             <FileText size={18} className="text-gray-500" />
             {document.title}
           </CardTitle>

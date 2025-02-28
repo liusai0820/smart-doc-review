@@ -1,28 +1,30 @@
+/* Tailwind CSS 基础指令 */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* 自定义变量和样式 */
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 210 40% 98%; /* #f8fafc */
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
+    --primary: 221 83% 53%; /* 更深的蓝色 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 25% 27%;
     --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
+    --muted: 210 20% 98%;
     --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
+    --accent: 226 83% 86%; /* #818cf8 浅靛蓝 */
     --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 74% 42%; /* #b91c1c */
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --ring: 221 83% 53%;
     --radius: 0.5rem;
   }
 
@@ -47,6 +49,51 @@
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
   }
+
+  /* 全局文本样式 */
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tight;
+  }
+
+  p {
+    @apply leading-relaxed;
+  }
+
+  /* 错误和警告文本样式 */
+  .text-error {
+    @apply text-[#b91c1c] drop-shadow-sm;
+  }
+
+  .text-warning {
+    @apply text-yellow-600 drop-shadow-sm;
+  }
+
+  .text-info {
+    @apply text-blue-600 drop-shadow-sm;
+  }
+
+  /* 全局卡片样式 */
+  [data-slot="card"] {
+    @apply overflow-hidden shadow-sm border rounded-lg;
+  }
+
+  /* 全局按钮样式 */
+  button, [type='button'], [type='submit'] {
+    @apply rounded-lg;
+  }
+
+  /* 顶部导航栏样式 */
+  header.top-nav {
+    @apply shadow-sm border-b bg-white/90 backdrop-blur-md;
+  }
+
+  /* 卡片标题图标基础样式 */
+  [data-slot="card-title"] {
+    @apply flex items-center gap-2;
+  }
+  [data-slot="card-title"] svg {
+    @apply text-gray-500 h-5 w-5;
+  }
 }
 
 @layer components {
@@ -54,7 +101,16 @@
     @apply border-[#e5e7eb];
   }
   body {
-    @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))];
+    @apply bg-[#f8fafc] text-[hsl(var(--foreground))];
+  }
+
+  /* 动画效果 */
+  .smooth-transition {
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .hover-lift {
+    @apply hover:-translate-y-0.5 hover:shadow-md transition-all duration-200;
   }
 
   /* 自定义样式 */
@@ -63,38 +119,52 @@
   }
 
   .badge-error {
-    @apply px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800;
+    @apply px-2 py-1 rounded-full text-xs font-medium bg-red-50 text-[#b91c1c];
   }
 
   .badge-warning {
-    @apply px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800;
+    @apply px-2 py-1 rounded-full text-xs font-medium bg-yellow-50 text-yellow-800;
   }
 
   .badge-info {
-    @apply px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800;
+    @apply px-2 py-1 rounded-full text-xs font-medium bg-[#818cf8]/10 text-[#818cf8];
   }
 
   .badge-suggestion {
-    @apply px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800;
+    @apply px-2 py-1 rounded-full text-xs font-medium bg-[#818cf8]/10 text-[#818cf8];
   }
 
   /* 标签样式 */
   .tab-active {
-    @apply bg-[hsl(var(--background))] rounded-t-lg;
+    @apply bg-[hsl(var(--background))] rounded-lg;
   }
   .tab-container {
-    @apply bg-gray-50 p-1 rounded-lg inline-flex;
+    @apply bg-gray-50/50 p-1 rounded-lg inline-flex;
   }
 
   /* 文本修改样式 */
   .deleted-text {
-    @apply line-through text-red-500;
+    @apply line-through text-[#b91c1c] border-b border-dashed border-[#b91c1c];
   }
   .added-text {
-    @apply text-green-600;
+    @apply text-emerald-700 border-b border-emerald-500;
   }
   .modified-text {
-    @apply text-blue-600;
+    @apply text-[#818cf8] bg-[#818cf8]/5 px-1 rounded;
+  }
+
+  /* 空状态样式 */
+  .empty-state {
+    @apply flex flex-col items-center justify-center h-64 p-6 text-center;
+  }
+  .empty-state-icon {
+    @apply h-12 w-12 text-gray-300 mb-4;
+  }
+  .empty-state-title {
+    @apply text-gray-600 font-medium mb-1;
+  }
+  .empty-state-description {
+    @apply text-gray-400 text-sm;
   }
 
   /* 文档样式 */
@@ -129,7 +199,6 @@
   /* 文档表格样式 */
   .doc-table {
     @apply w-full border-collapse border border-gray-300 my-4 bg-white table-fixed;
-    min-width: 600px;
   }
 
   .doc-tr {
@@ -142,10 +211,6 @@
 
   .doc-td, .doc-th {
     @apply border border-gray-300 p-2 text-sm align-top;
-    min-width: 120px;
-    max-width: 300px;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
   }
 
   .doc-th {
@@ -155,15 +220,11 @@
   /* 确保表格在容器中正确显示 */
   .prose table {
     @apply my-4 w-full;
-    display: table;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
   }
 
   /* 表格容器样式 */
   .table-container {
     @apply w-full overflow-x-auto;
-    max-height: calc(100vh - 300px);
   }
 
   /* 修改建议样式优化 */

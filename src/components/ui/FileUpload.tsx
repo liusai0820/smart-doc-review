@@ -5,9 +5,11 @@ import Notification from "./Notification";
 
 interface FileUploadProps {
   onUploadComplete?: (fileName: string, fileContent?: ArrayBuffer, fileUrl?: string) => void;
+  onUploadStart?: () => void;
+  onUploadEnd?: () => void;
 }
 
-const FileUpload: FC<FileUploadProps> = ({ onUploadComplete }) => {
+const FileUpload: FC<FileUploadProps> = ({ onUploadComplete, onUploadStart, onUploadEnd }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [notification, setNotification] = useState<{
     message: string;
@@ -48,7 +50,7 @@ const FileUpload: FC<FileUploadProps> = ({ onUploadComplete }) => {
     }
 
     try {
-      setIsUploading(true);
+      onUploadStart?.();
       
       // 读取文件内容
       const fileContent = await file.arrayBuffer();
@@ -79,6 +81,7 @@ const FileUpload: FC<FileUploadProps> = ({ onUploadComplete }) => {
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+      onUploadEnd?.();
     }
   };
 

@@ -227,7 +227,7 @@ export default function Home() {
   return (
     <main className="min-h-screen flex flex-col">
       {/* 顶部导航栏 */}
-      <header className="bg-white border-b border-gray-200 shadow-sm py-4 px-6">
+      <header className="sticky top-0 z-50 backdrop-filter backdrop-blur-md bg-white/90 border-b border-gray-200 shadow-sm py-4 px-6">
         <div className="flex justify-between items-center">
           <div className="flex items-center">
             <FileText className="h-6 w-6 text-blue-500 mr-2" />
@@ -270,7 +270,7 @@ export default function Home() {
         <TabsContent value="review" className="flex-1">
           <div className="flex-1 grid grid-cols-12 min-w-[1280px] p-6 gap-6">
             {/* 左侧文档列表 */}
-            <div className="col-span-3">
+            <div className="col-span-2">
               <DocumentList 
                 documents={documents} 
                 selectedDocument={selectedDocument}
@@ -281,7 +281,7 @@ export default function Home() {
             </div>
 
             {/* 中间文档查看器 */}
-            <div className="col-span-6">
+            <div className="col-span-7">
               <Tabs defaultValue="view" className="w-full">
                 <TabsList className="mb-4">
                   <TabsTrigger value="view">文档视图</TabsTrigger>
