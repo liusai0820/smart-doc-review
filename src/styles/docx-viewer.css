@@ -1,0 +1,51 @@
+.docx-viewer {
+  background: white;
+  padding: 40px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.docx-viewer .docx {
+  max-width: 816px; /* A4 宽度 */
+  margin: 0 auto;
+  background: white;
+  padding: 20px;
+}
+
+.docx-viewer .docx p {
+  margin-bottom: 1em;
+  line-height: 1.6;
+}
+
+.docx-viewer .docx table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+.docx-viewer .docx td,
+.docx-viewer .docx th {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.docx-viewer .docx h1,
+.docx-viewer .docx h2,
+.docx-viewer .docx h3,
+.docx-viewer .docx h4,
+.docx-viewer .docx h5,
+.docx-viewer .docx h6 {
+  margin: 1em 0;
+  font-weight: bold;
+}
+
+.docx-viewer .loading {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+.docx-viewer .error-message {
+  color: #e53e3e;
+  text-align: center;
+  padding: 20px;
+} 

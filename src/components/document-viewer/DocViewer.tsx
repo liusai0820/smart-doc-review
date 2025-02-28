@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { renderAsync } from 'docx-preview';
 
 interface DocViewerProps {
@@ -7,77 +7,46 @@ interface DocViewerProps {
 }
 
 const DocViewer: React.FC<DocViewerProps> = ({ fileUrl, content }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const loadDocument = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
+    const renderDocument = async () => {
+      if (!containerRef.current) return;
 
-        let arrayBuffer: ArrayBuffer;
+      try {
+        // 清空容器
+        containerRef.current.innerHTML = '';
 
         if (content) {
-          arrayBuffer = content;
+          // 如果直接传入了 ArrayBuffer 内容
+          await renderAsync(content, containerRef.current, containerRef.current);
         } else if (fileUrl) {
+          // 如果是通过 URL 加载
           const response = await fetch(fileUrl);
-          if (!response.ok) {
-            throw new Error(`无法获取文档: ${response.statusText}`);
-          }
-          arrayBuffer = await response.arrayBuffer();
-        } else {
-          throw new Error('未提供文档内容或URL');
+          const blob = await response.blob();
+          const arrayBuffer = await blob.arrayBuffer();
+          await renderAsync(arrayBuffer, containerRef.current, containerRef.current);
         }
-
+      } catch (error) {
+        console.error('文档渲染失败:', error);
         if (containerRef.current) {
-          // 使用 docx-preview 渲染文档
-          await renderAsync(arrayBuffer, containerRef.current, containerRef.current, {
-            className: 'docx-viewer',
-            inWrapper: true,
-            ignoreWidth: false,
-            ignoreHeight: false,
-            ignoreFonts: false,
-            breakPages: true,
-            useBase64URL: true,
-          });
+          containerRef.current.innerHTML = '<div class="error-message">文档加载失败</div>';
         }
-      } catch (err) {
-        console.error('文档加载错误:', err);
-        setError(err instanceof Error ? err.message : '加载文档时出错');
-      } finally {
-        setIsLoading(false);
       }
     };
 
-    loadDocument();
+    renderDocument();
   }, [fileUrl, content]);
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-[calc(100vh-300px)]">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-        <span className="ml-2">正在加载文档...</span>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-center py-8">
-        <div className="text-red-500 mb-2">加载文档时出错:</div>
-        <div>{error}</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="document-viewer">
-      <div 
-        ref={containerRef} 
-        className="doc-container p-4 bg-white rounded overflow-y-auto h-[calc(100vh-280px)]"
-      />
+    <div 
+      ref={containerRef} 
+      className="docx-viewer bg-white rounded-lg shadow p-4 min-h-[500px] overflow-auto"
+      style={{ 
+        maxHeight: 'calc(100vh - 300px)',
+      }}
+    >
+      <div className="loading">加载中...</div>
     </div>
   );
 };

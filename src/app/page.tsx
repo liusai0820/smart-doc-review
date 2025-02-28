@@ -1,24 +1,24 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { FileText, History, Settings, BarChart, X } from "lucide-react";
+import { FileText, History, Settings, BarChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import DocumentList from "@/components/document-list/DocumentList";
 import DocumentViewer from "@/components/document-viewer/DocumentViewer";
-import DocumentInsights, { DocumentInsightsRef } from "@/components/document-insights/DocumentInsights";
-import { mockDocuments } from "@/lib/mock-data";
-import { Document } from "@/lib/mock-data";
+import { DocumentInsights, DocumentInsightsRef } from "@/components/document-insights/DocumentInsights";
+import { Document } from "@/lib/types";
 import HistoryModal from "@/components/ui/HistoryModal";
 import SettingsModal from "@/components/ui/SettingsModal";
 import Notification from "@/components/ui/Notification";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import ChangesComparisonView from "@/components/document-viewer/ChangesComparisonView";
 import ReviewDashboard from "@/components/dashboard/ReviewDashboard";
+import ApiDebugHelper from "@/components/debug/ApiDebugHelper";
 
 export default function Home() {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
-  const [documents, setDocuments] = useState(mockDocuments);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("review");
@@ -29,6 +29,12 @@ export default function Home() {
   const [aiReviewedParagraphs, setAiReviewedParagraphs] = useState<Document["paragraphs"] | null>(null);
   const insightsRef = useRef<DocumentInsightsRef>(null);
   const [documentTab, setDocumentTab] = useState("view");
+
+  // 是否开发环境或本地主机
+  const isDevelopment = process.env.NODE_ENV === 'development' || 
+                       (typeof window !== 'undefined' && 
+                       (window.location.hostname === 'localhost' || 
+                        window.location.hostname === '127.0.0.1'));
 
   const handleSelectDocument = (document: Document) => {
     setSelectedDocument(document);
@@ -296,91 +302,83 @@ export default function Home() {
         <TabsContent value="review" className="flex-1">
           <div className="flex-1 grid grid-cols-12 min-w-[1280px] p-6 gap-6">
             {/* 左侧文档列表 */}
-            <div className="col-span-3">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-blue-500" />
-                  文档列表
-                </h2>
-              </div>
-              <DocumentList 
-                documents={documents} 
-                selectedDocument={selectedDocument}
-                onSelectDocument={handleSelectDocument}
-                onUploadComplete={handleUploadComplete}
-                onDocumentsUpdate={handleDocumentsUpdate}
-              />
+            <div className="col-span-2">
+              <Card className="h-[calc(100vh-120px)]">
+                <CardHeader className="pb-3 border-b">
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-gray-500" />
+                    文档列表
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 h-[calc(100%-57px)]">
+                  <DocumentList 
+                    documents={documents} 
+                    selectedDocument={selectedDocument}
+                    onSelectDocument={handleSelectDocument}
+                    onUploadComplete={handleUploadComplete}
+                    onDocumentsUpdate={handleDocumentsUpdate}
+                  />
+                </CardContent>
+              </Card>
             </div>
 
             {/* 中间文档查看器 */}
-            <div className="col-span-6">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-blue-500" />
-                  文档内容
-                </h2>
-              </div>
-              <Tabs value={documentTab} onValueChange={setDocumentTab} className="w-full">
-                <TabsList className="mb-4">
-                  <TabsTrigger value="view">文档视图</TabsTrigger>
-                  <TabsTrigger value="compare">变更对比</TabsTrigger>
-                </TabsList>
-                <TabsContent value="view" className="mt-0">
-                  <DocumentViewer 
-                    document={selectedDocument} 
-                    onReviewStart={handleReviewStart}
-                    onReviewComplete={handleReviewComplete}
-                  />
-                </TabsContent>
-                <TabsContent value="compare" className="mt-0">
-                  {selectedDocument && aiReviewedParagraphs ? (
-                    <Card className="h-full">
-                      <CardHeader className="pb-3">
-                        <div className="flex justify-between items-center">
-                          <CardTitle className="text-lg">变更对比</CardTitle>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="flex gap-1" 
-                            onClick={() => setDocumentTab("view")}
-                          >
-                            <X size={16} />
-                            <span>关闭</span>
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
+            <div className="col-span-7">
+              <Card className="h-[calc(100vh-120px)]">
+                <CardHeader className="pb-3 border-b">
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-gray-500" />
+                    文档内容
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 h-[calc(100%-57px)]">
+                  <Tabs value={documentTab} onValueChange={setDocumentTab} className="w-full h-full">
+                    <TabsList className="mb-4">
+                      <TabsTrigger value="view">文档视图</TabsTrigger>
+                      <TabsTrigger value="compare">变更对比</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="view" className="mt-0 h-[calc(100%-44px)]">
+                      <DocumentViewer 
+                        document={selectedDocument} 
+                        onReviewStart={handleReviewStart}
+                        onReviewComplete={handleReviewComplete}
+                      />
+                    </TabsContent>
+                    <TabsContent value="compare" className="mt-0 h-[calc(100%-44px)]">
+                      {selectedDocument && aiReviewedParagraphs ? (
                         <ChangesComparisonView 
                           document={selectedDocument}
                           reviewedParagraphs={aiReviewedParagraphs}
                           onAcceptChange={handleAcceptChange}
                           onRejectChange={handleRejectChange}
                         />
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <Card className="h-full flex items-center justify-center">
-                      <div className="text-center p-6">
-                        <p className="text-gray-500">请先选择文档并完成AI审阅</p>
-                      </div>
-                    </Card>
-                  )}
-                </TabsContent>
-              </Tabs>
+                      ) : (
+                        <div className="text-center p-6">
+                          <p className="text-gray-500">请先选择文档并完成AI审阅</p>
+                        </div>
+                      )}
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </Card>
             </div>
 
             {/* 右侧文档洞察面板 */}
             <div className="col-span-3">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                  <BarChart className="h-5 w-5 text-blue-500" />
-                  文档分析
-                </h2>
-              </div>
-              <DocumentInsights 
-                ref={insightsRef}
-                document={selectedDocument} 
-              />
+              <Card className="h-[calc(100vh-120px)]">
+                <CardHeader className="pb-3 border-b">
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <BarChart className="h-4 w-4 text-gray-500" />
+                    文档分析
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 h-[calc(100%-57px)]">
+                  <DocumentInsights 
+                    ref={insightsRef}
+                    document={selectedDocument} 
+                  />
+                </CardContent>
+              </Card>
             </div>
           </div>
         </TabsContent>
@@ -408,6 +406,9 @@ export default function Home() {
           onClose={() => setNotification(null)}
         />
       )}
+
+      {/* 调试工具 - 仅在开发环境或本地主机显示 */}
+      {isDevelopment && <ApiDebugHelper />}
     </main>
   );
 }

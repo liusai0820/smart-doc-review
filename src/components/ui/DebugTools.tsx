@@ -5,19 +5,27 @@ import { Button } from "@/components/ui/button";
 import { parseRobustJSON } from '@/lib/improved-json-parser';
 import { reviewDocumentWithLLM } from '@/lib/openrouter-api';
 import { Document } from '@/lib/mock-data';
+import { extractDocumentContent } from '@/lib/document-content-extraction'; // 导入内容提取工具
 
 interface DebugToolsProps {
   isOpen: boolean;
   onClose: () => void;
   document?: Document | null;
+  documentContent?: string | null; // 从父组件传入的文档内容
 }
 
-const DebugTools: React.FC<DebugToolsProps> = ({ isOpen, onClose, document }) => {
+const DebugTools: React.FC<DebugToolsProps> = ({ 
+  isOpen, 
+  onClose, 
+  document, 
+  documentContent 
+}) => {
   const [apiResponse, setApiResponse] = useState<string>('');
   const [parsedResult, setParsedResult] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState(process.env.NEXT_PUBLIC_OPENROUTER_API_KEY || '');
+  const [extractedContent, setExtractedContent] = useState<string>(documentContent || '');
   const [modelName, setModelName] = useState(() => {
     // 优先从localStorage获取，如果没有则使用默认值
     if (typeof window !== 'undefined') {
@@ -65,6 +73,27 @@ const DebugTools: React.FC<DebugToolsProps> = ({ isOpen, onClose, document }) =>
     }
   };
 
+  // 提取文档内容
+  const extractContent = async () => {
+    if (!document) {
+      setError('没有文档可供提取内容');
+      return;
+    }
+    
+    try {
+      const content = await extractDocumentContent(document);
+      setExtractedContent(content);
+      
+      if (!content || content.length < 10) {
+        setError('警告：提取的文档内容为空或太短');
+      } else {
+        setApiResponse(`成功提取文档内容: ${content.length}字符\n\n预览:\n${content.substring(0, 500)}...`);
+      }
+    } catch (error) {
+      setError(`提取文档内容失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    }
+  };
+
   // 测试审阅API
   const testReviewApi = async () => {
     if (!document) {
@@ -76,7 +105,29 @@ const DebugTools: React.FC<DebugToolsProps> = ({ isOpen, onClose, document }) =>
     setError(null);
     
     try {
-      const result = await reviewDocumentWithLLM(document, apiKey, modelName);
+      // 优先使用extractedContent，其次是传入的documentContent
+      const contentToUse = extractedContent || documentContent || await extractDocumentContent(document);
+      
+      if (!contentToUse || contentToUse.length < 10) {
+        throw new Error('文档内容为空或太短，无法进行审阅');
+      }
+      
+      // 生成测试提示词 - 仅使用简短的指令
+      const testPrompt = `
+您是一位专业的文档审阅专家。请审阅以下文档，提供总体评价和改进建议。
+请以JSON格式返回结果，包含documentInfo和reviewContent字段。
+
+文档标题: ${document.title}
+
+文档内容:
+---
+${contentToUse}
+---
+      `;
+      
+      setApiResponse(`使用的文档内容: ${contentToUse.length}字符\n提示词长度: ${testPrompt.length}字符`);
+      
+      const result = await reviewDocumentWithLLM(document, apiKey, modelName, testPrompt);
       setApiResponse(JSON.stringify(result, null, 2));
       setParsedResult('API调用成功，解析结果已显示');
     } catch (error) {
@@ -113,12 +164,47 @@ const DebugTools: React.FC<DebugToolsProps> = ({ isOpen, onClose, document }) =>
           </div>
         </CardHeader>
         <CardContent className="p-4">
-          <Tabs defaultValue="api">
+          <Tabs defaultValue="document">
             <TabsList className="mb-4">
+              <TabsTrigger value="document">文档内容</TabsTrigger>
               <TabsTrigger value="api">API测试</TabsTrigger>
               <TabsTrigger value="json">JSON解析测试</TabsTrigger>
               <TabsTrigger value="settings">设置</TabsTrigger>
             </TabsList>
+            
+            <TabsContent value="document" className="space-y-4">
+              <div className="flex gap-2">
+                <Button onClick={extractContent}>
+                  提取文档内容
+                </Button>
+                <span className="text-gray-500 text-sm my-auto">
+                  {extractedContent ? `已提取 ${extractedContent.length} 字符` : '未提取内容'}
+                </span>
+              </div>
+              
+              {error && <div className="text-red-500 p-2 border border-red-300 rounded bg-red-50">{error}</div>}
+              
+              <div className="grid gap-4">
+                <div>
+                  <h3 className="font-medium mb-2">文档内容:</h3>
+                  <div className="border rounded p-4 bg-gray-50 h-80 overflow-auto">
+                    <pre className="text-xs whitespace-pre-wrap">
+                      {extractedContent || '点击"提取文档内容"按钮获取内容'}
+                    </pre>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="font-medium mb-2">文档信息:</h3>
+                  <div className="bg-gray-100 p-3 rounded text-sm">
+                    <div><strong>标题:</strong> {document?.title}</div>
+                    <div><strong>段落数:</strong> {document?.paragraphs?.length || 0}</div>
+                    <div><strong>状态:</strong> {document?.status}</div>
+                    <div><strong>日期:</strong> {document?.date}</div>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
             
             <TabsContent value="api" className="space-y-4">
               <div className="flex gap-2">
@@ -128,9 +214,11 @@ const DebugTools: React.FC<DebugToolsProps> = ({ isOpen, onClose, document }) =>
                 <Button onClick={testReviewApi} disabled={isLoading || !document}>
                   测试文档审阅API
                 </Button>
+                <span className="text-sm text-gray-500 my-auto">
+                  {isLoading ? '请求中...' : ''}
+                </span>
               </div>
               
-              {isLoading && <div className="text-blue-500">请求中...</div>}
               {error && <div className="text-red-500 p-2 border border-red-300 rounded bg-red-50">{error}</div>}
               
               <div className="mt-4">
@@ -187,9 +275,9 @@ const DebugTools: React.FC<DebugToolsProps> = ({ isOpen, onClose, document }) =>
                   onChange={handleModelChange}
                   className="w-full p-2 border rounded"
                 >
-                  <option value="deepseek/deepseek-r1">DeepSeek Coder R1</option>
-                  <option value="google/gemini-2.0-pro-exp-02-05:free">Google Gemini 2.0 Pro</option>
                   <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                  <option value="google/gemini-2.0-pro-exp-02-05:free">Google Gemini 2.0 Pro</option>
+                  <option value="anthropic/claude-3-opus">Claude 3 Opus</option>
                 </select>
               </div>
               

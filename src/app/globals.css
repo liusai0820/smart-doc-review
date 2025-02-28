@@ -3,6 +3,8 @@
 @tailwind components;
 @tailwind utilities;
 
+@import '../styles/docx-viewer.css';
+
 /* 自定义变量和样式 */
 @layer base {
   :root {

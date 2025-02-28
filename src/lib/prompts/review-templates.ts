@@ -115,8 +115,138 @@ export const reviewTemplates: ReviewTemplate[] = [
       2. 文献综述是否全面
       3. 研究方法是否合适
       4. 数据分析是否恰当
-      5. 结论是否有说服力且与研究发现相符
+      5. 结论是否有充分证据支持
+      6. 引用格式是否规范
     `,
-    focusAreas: ["研究问题", "文献综述", "研究方法", "数据分析", "结论"]
+    focusAreas: ["研究问题", "方法论", "数据分析", "论证逻辑", "引用规范"]
+  }
+];
+
+/**
+ * 根据文档内容自动推荐最合适的模板
+ * @param documentTitle 文档标题
+ * @param documentContent 文档内容
+ * @returns 推荐的模板ID
+ */
+export function recommendTemplate(documentTitle: string, documentContent: string): string {
+  // 简单的关键词匹配，实际应用中可以使用更复杂的算法或AI
+  const titleAndContent = (documentTitle + " " + documentContent).toLowerCase();
+  
+  // 匹配关键词
+  if (/财务|收入|利润|预算|成本|财报|balance|income|profit|budget/i.test(titleAndContent)) {
+    return "financial-report";
+  }
+  
+  if (/技术|架构|api|接口|服务器|数据库|framework|技术选型|系统设计/i.test(titleAndContent)) {
+    return "technical-spec";
+  }
+  
+  if (/项目|提案|proposal|可行性|立项|项目计划|project plan|milestone/i.test(titleAndContent)) {
+    return "project-proposal";
+  }
+  
+  if (/市场|用户|竞品|调研|分析|market|competitor|user research|用户群/i.test(titleAndContent)) {
+    return "market-research";
+  }
+  
+  if (/合同|协议|法律|条款|授权|合规|legal|contract|agreement|compliance/i.test(titleAndContent)) {
+    return "legal-doc";
+  }
+  
+  if (/研究|论文|实验|methodology|literature|研究方法|文献|引用|citation/i.test(titleAndContent)) {
+    return "academic-paper";
+  }
+  
+  // 默认返回通用模板
+  return "general-report";
+}
+
+/**
+ * 获取指定ID的模板，如果不存在则返回通用模板
+ */
+export function getTemplateById(templateId: string): ReviewTemplate {
+  const template = reviewTemplates.find(t => t.id === templateId);
+  return template || reviewTemplates[0]; // 默认返回第一个（通用模板）
+}
+
+/**
+ * 根据模板ID生成审阅提示词
+ * 修复: 确保文档内容被正确包含在提示词中
+ */
+export function generatePromptFromTemplate(templateId: string, documentTitle: string, documentContent: string): string {
+  const template = getTemplateById(templateId);
+  
+  // 确保文档内容不为空
+  if (!documentContent || documentContent.trim() === '') {
+    console.error('文档内容为空，无法生成有效提示词');
+    documentContent = '文档内容为空';
+  }
+  
+  // 记录提示词长度，帮助调试
+  const prompt = `
+您是一位专业的文档审阅专家，现在需要帮助审阅一份文档。请严格按照指定的JSON格式返回审阅结果。
+
+文档类型: ${template.name}
+文档标题: ${documentTitle}
+
+审阅指南:
+${template.instructions}
+
+重点关注领域:
+${template.focusAreas.map(area => `- ${area}`).join('\n')}
+
+请分析以下文档内容，指出需要修改、完善或提升的地方。
+
+文档内容:
+---
+${documentContent}
+---
+
+请严格按照以下JSON格式返回审阅结果：
+
+{
+  "documentInfo": {
+    "title": "文档标题",
+    "overview": "文档总体评价",
+    "totalIssues": {
+      "errors": 0,
+      "warnings": 0,
+      "suggestions": 0
+    }
   },
-]
+  "reviewContent": [
+    {
+      "id": "段落ID",
+      "originalText": "原文内容",
+      "changes": [
+        {
+          "type": "replace|insert|delete",
+          "position": {
+            "start": 0,
+            "end": 0
+          },
+          "originalText": "需要修改的原文",
+          "newText": "建议修改为",
+          "explanation": "修改原因说明",
+          "severity": "error|warning|suggestion",
+          "category": "问题类别"
+        }
+      ]
+    }
+  ]
+}
+
+注意事项：
+1. 严格遵守JSON格式，确保所有字符串都用双引号
+2. 所有字段都必须提供，不要省略任何字段
+3. severity只能是"error"、"warning"或"suggestion"之一
+4. type只能是"replace"、"insert"或"delete"之一
+5. position中的start和end必须是数字
+6. 数组可以为空，但不能省略
+7. 不要在JSON中添加注释或其他非JSON内容
+`;
+
+  console.log(`生成的提示词长度: ${prompt.length}，文档内容长度: ${documentContent.length}`);
+  
+  return prompt;
+}

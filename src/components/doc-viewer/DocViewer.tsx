@@ -50,6 +50,21 @@ const DocViewer: React.FC<DocViewerProps> = ({ fileUrl, content }) => {
     }
 
     try {
+      // 确保容器是空的并且有正确的尺寸
+      containerRef.current.innerHTML = '';
+      
+      // 等待DOM更新
+      await new Promise(resolve => setTimeout(resolve, 0));
+      
+      // 确保容器尺寸合适
+      if (containerRef.current.clientWidth === 0 || containerRef.current.clientHeight === 0) {
+        console.log('容器尺寸不正确:', {
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight
+        });
+        return false;
+      }
+
       console.log('准备渲染文档:', {
         hasContainer: !!containerRef.current,
         containerSize: {
@@ -60,16 +75,13 @@ const DocViewer: React.FC<DocViewerProps> = ({ fileUrl, content }) => {
         attempt: renderAttemptsRef.current + 1
       });
 
-      // 确保容器是空的
-      containerRef.current.innerHTML = '';
-
       // 等待一帧以确保容器已经准备好
       await new Promise(resolve => requestAnimationFrame(resolve));
 
       if (!mountedRef.current) return false;
 
       // 渲染文档
-      await renderAsync(buffer, containerRef.current, containerRef.current, {
+      await renderAsync(buffer, containerRef.current, undefined, {
         className: 'docx-viewer',
         inWrapper: true,
         ignoreWidth: false,
@@ -80,12 +92,22 @@ const DocViewer: React.FC<DocViewerProps> = ({ fileUrl, content }) => {
         debug: true
       });
 
+      // 检查渲染结果
+      if (containerRef.current.children.length === 0) {
+        console.error('渲染结果为空');
+        return false;
+      }
+
+      // 等待一帧以确保渲染完成
+      await new Promise(resolve => requestAnimationFrame(resolve));
+
       console.log('文档渲染完成:', {
         attempt: renderAttemptsRef.current + 1,
         containerSize: {
           width: containerRef.current.clientWidth,
           height: containerRef.current.clientHeight
-        }
+        },
+        childrenCount: containerRef.current.children.length
       });
       return true;
     } catch (error) {

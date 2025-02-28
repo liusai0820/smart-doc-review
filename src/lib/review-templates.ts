@@ -129,36 +129,70 @@ export interface ReviewTemplate {
    * @returns 推荐的模板ID
    */
   export function recommendTemplate(documentTitle: string, documentContent: string): string {
-    // 简单的关键词匹配，实际应用中可以使用更复杂的算法或AI
     const titleAndContent = (documentTitle + " " + documentContent).toLowerCase();
     
-    // 匹配关键词
-    if (/财务|收入|利润|预算|成本|财报|balance|income|profit|budget/i.test(titleAndContent)) {
-      return "financial-report";
-    }
+    // 为每个模板计算匹配得分
+    const templateScores = reviewTemplates.map(template => {
+      let score = 0;
+      
+      // 1. 标题匹配权重 (最高优先级)
+      if (documentTitle.toLowerCase().includes(template.name.toLowerCase())) {
+        score += 10;
+      }
+      
+      // 2. 关键领域匹配
+      template.focusAreas.forEach(area => {
+        const regex = new RegExp(area, 'i');
+        if (regex.test(titleAndContent)) {
+          score += 3;
+        }
+      });
+      
+      // 3. 类别特定关键词匹配
+      const categoryKeywords: Record<string, string[]> = {
+        "财务": ["财务", "收入", "利润", "预算", "成本", "财报", "balance", "income", "profit", "budget", "revenue", "expense"],
+        "技术": ["技术", "架构", "api", "接口", "服务器", "数据库", "framework", "系统设计", "algorithm", "code", "开发", "测试"],
+        "项目": ["项目", "提案", "proposal", "可行性", "立项", "项目计划", "project", "milestone", "进度", "风险", "资源"],
+        "市场": ["市场", "用户", "竞品", "调研", "分析", "market", "competitor", "research", "用户群", "营销", "销售"],
+        "法律": ["合同", "协议", "法律", "条款", "授权", "合规", "legal", "contract", "agreement", "compliance", "rights"],
+        "学术": ["研究", "论文", "实验", "methodology", "literature", "研究方法", "文献", "引用", "citation", "实验", "数据"]
+      };
+      
+      const categoryWords = categoryKeywords[template.category];
+      if (categoryWords) {
+        categoryWords.forEach(word => {
+          const regex = new RegExp(word, 'i');
+          if (regex.test(titleAndContent)) {
+            score += 2;
+          }
+        });
+      }
+      
+      // 4. 内容长度和复杂度分析
+      const contentWords = documentContent.split(/\s+/).length;
+      if (template.id === "academic-paper" && contentWords > 2000) {
+        score += 2; // 长文档更可能是学术论文
+      }
+      
+      // 5. 文档结构特征分析
+      if (template.id === "technical-spec" && /```|\{|\}|function|class|interface/i.test(documentContent)) {
+        score += 2; // 包含代码块或技术术语的更可能是技术文档
+      }
+      
+      // 6. 数值密度分析
+      const numberDensity = (documentContent.match(/\d+(\.\d+)?/g) || []).length / contentWords;
+      if (template.id === "financial-report" && numberDensity > 0.1) {
+        score += 2; // 高数值密度更可能是财务报告
+      }
+      
+      return { id: template.id, score };
+    });
     
-    if (/技术|架构|api|接口|服务器|数据库|framework|技术选型|系统设计/i.test(titleAndContent)) {
-      return "technical-spec";
-    }
+    // 按得分排序并返回最佳匹配
+    const bestMatch = templateScores.sort((a, b) => b.score - a.score)[0];
     
-    if (/项目|提案|proposal|可行性|立项|项目计划|project plan|milestone/i.test(titleAndContent)) {
-      return "project-proposal";
-    }
-    
-    if (/市场|用户|竞品|调研|分析|market|competitor|user research|用户群/i.test(titleAndContent)) {
-      return "market-research";
-    }
-    
-    if (/合同|协议|法律|条款|授权|合规|legal|contract|agreement|compliance/i.test(titleAndContent)) {
-      return "legal-doc";
-    }
-    
-    if (/研究|论文|实验|methodology|literature|研究方法|文献|引用|citation/i.test(titleAndContent)) {
-      return "academic-paper";
-    }
-    
-    // 默认返回通用模板
-    return "general-report";
+    // 如果最高得分过低，返回通用模板
+    return bestMatch.score >= 3 ? bestMatch.id : "general-report";
   }
   
   /**
@@ -175,7 +209,20 @@ export interface ReviewTemplate {
   export function generatePromptFromTemplate(templateId: string, documentTitle: string, documentContent: string): string {
     const template = getTemplateById(templateId);
     
-    return `
+    console.log('生成提示词:', {
+      templateId,
+      documentTitle,
+      contentLength: documentContent?.length || 0,
+      contentPreview: documentContent?.substring(0, 50)
+    });
+    
+    // 验证输入
+    if (!documentContent || documentContent.trim().length === 0) {
+      console.error('文档内容为空');
+      throw new Error('文档内容不能为空');
+    }
+
+    const prompt = `
 您是一位专业的文档审阅专家，现在需要帮助审阅一份文档。请严格按照指定的JSON格式返回审阅结果。
 
 文档类型: ${template.name}
@@ -189,17 +236,17 @@ ${template.focusAreas.map(area => `- ${area}`).join('\n')}
 
 请分析以下文档内容，指出需要修改、完善或提升的地方。
 
+----------------
 文档内容:
----
 ${documentContent}
----
+----------------
 
 请严格按照以下JSON格式返回审阅结果：
 
 {
   "documentInfo": {
     "title": "文档标题",
-    "overview": "文档总体评价",
+    "overview": "文档总体评价（300字以内）",
     "totalIssues": {
       "errors": 0,
       "warnings": 0,
@@ -217,26 +264,25 @@ ${documentContent}
             "start": 0,
             "end": 0
           },
-          "originalText": "需要修改的原文",
-          "newText": "建议修改为",
-          "explanation": "修改原因说明",
+          "originalText": "需要修改的文本",
+          "newText": "建议修改为的文本",
+          "explanation": "修改理由",
           "severity": "error|warning|suggestion",
-          "category": "问题类别"
+          "category": "修改类别"
         }
       ]
     }
   ]
-}
+}`;
 
-注意事项：
-1. 严格遵守JSON格式，确保所有字符串都用双引号
-2. 所有字段都必须提供，不要省略任何字段
-3. severity只能是"error"、"warning"或"suggestion"之一
-4. type只能是"replace"、"insert"或"delete"之一
-5. position中的start和end必须是数字
-6. 数组可以为空，但不能省略
-7. 不要在JSON中添加注释或其他非JSON内容
-`;
+    // 验证生成的提示词
+    console.log('提示词生成结果:', {
+      promptLength: prompt.length,
+      contentIncluded: prompt.includes(documentContent.substring(0, 50)),
+      contentPosition: prompt.indexOf(documentContent)
+    });
+
+    return prompt;
   }
   
   /**

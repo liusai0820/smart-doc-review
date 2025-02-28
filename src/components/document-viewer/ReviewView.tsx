@@ -94,54 +94,6 @@ const EnhancedReviewView: React.FC<EnhancedReviewViewProps> = ({
     });
   };
 
-  // 渲染修改建议的高亮文本 - 使用精确位置信息
-  const renderPreciseChangeHighlight = (
-    paragraph: Paragraph,
-    change: Change, 
-    paragraphId: number
-  ): JSX.Element | null => {
-    // 使用position信息进行精确定位
-    if (change.position && 
-        typeof change.position.start === 'number' && 
-        typeof change.position.end === 'number') {
-      
-      const start = change.position.start;
-      const end = change.position.end;
-      
-      // 确保位置在有效范围内
-      if (start >= 0 && end <= paragraph.text.length && start < end) {
-        const highlightText = paragraph.text.substring(start, end);
-        
-        return (
-          <span
-            key={change.id}
-            className={`${getTypeClass(change.type)} ${getBgColor(change.severity)} rounded px-1 cursor-pointer relative group`}
-            onClick={(event) => handleHighlightClick(event, change, paragraphId)}
-          >
-            {highlightText}
-            {getSeverityIcon(change.severity)}
-          </span>
-        );
-      }
-    }
-    
-    // 如果没有有效的position信息，回退到使用original字段
-    if (change.original) {
-      return (
-        <span
-          key={change.id}
-          className={`${getTypeClass(change.type)} ${getBgColor(change.severity)} rounded px-1 cursor-pointer relative group`}
-          onClick={(event) => handleHighlightClick(event, change, paragraphId)}
-        >
-          {change.original}
-          {getSeverityIcon(change.severity)}
-        </span>
-      );
-    }
-    
-    return null;
-  };
-
   // 渲染段落内容 - 使用精确位置处理
   const renderParagraphContent = (paragraph: Paragraph) => {
     if (!paragraph.changes || paragraph.changes.length === 0) {

@@ -1,4 +1,5 @@
 import { Document, Paragraph } from "@/lib/mock-data";
+import { diffWords, Change } from 'diff';
 
 interface ChangesComparisonViewProps {
   document: Document;
@@ -13,6 +14,30 @@ export default function ChangesComparisonView({
   onAcceptChange,
   onRejectChange
 }: ChangesComparisonViewProps) {
+  // 渲染文字差异
+  const renderDiff = (original: string, modified: string) => {
+    if (!original || !modified) return null;
+    
+    const differences = diffWords(original, modified);
+    
+    return (
+      <div>
+        {differences.map((part: Change, index: number) => (
+          <span 
+            key={index}
+            className={
+              part.added ? "bg-green-100 text-green-800" :
+              part.removed ? "bg-red-100 text-red-800 line-through" :
+              "text-gray-700"
+            }
+          >
+            {part.value}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {reviewedParagraphs.map((paragraph, index) => (
@@ -31,18 +56,36 @@ export default function ChangesComparisonView({
                   className="bg-gray-50 rounded-lg p-3 border"
                 >
                   <div className="flex items-start justify-between gap-4">
-                    <div>
+                    <div className="flex-1">
                       {change.type === 'replace' && (
                         <>
-                          <p className="text-gray-500 line-through mb-1">{change.original}</p>
-                          <p className="text-green-600">{change.new}</p>
+                          <div className="mb-2">
+                            {renderDiff(change.original || '', change.new || '')}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {change.explanation}
+                          </div>
                         </>
                       )}
                       {change.type === 'deletion' && (
-                        <p className="text-gray-500 line-through">{change.original}</p>
+                        <>
+                          <div className="text-red-600 line-through">
+                            {change.original}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {change.explanation}
+                          </div>
+                        </>
                       )}
                       {change.type === 'addition' && (
-                        <p className="text-green-600">{change.new}</p>
+                        <>
+                          <div className="text-green-600">
+                            {change.new}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {change.explanation}
+                          </div>
+                        </>
                       )}
                     </div>
                     <div className="flex gap-2">

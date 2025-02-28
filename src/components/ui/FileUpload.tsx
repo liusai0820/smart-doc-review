@@ -51,15 +51,50 @@ const FileUpload: FC<FileUploadProps> = ({ onUploadComplete, onUploadStart, onUp
 
     try {
       onUploadStart?.();
+      setIsUploading(true);
       
-      // 读取文件内容
+      // 对于文本文件，先尝试检测编码
+      if (file.name.endsWith('.txt')) {
+        // 读取文件的前4KB来检测编码
+        const sampleBuffer = await file.slice(0, 4096).arrayBuffer();
+        const firstBytes = new Uint8Array(sampleBuffer);
+        
+        console.log('检测文件编码:', {
+          fileName: file.name,
+          fileSize: file.size,
+          sampleBytes: Array.from(firstBytes.slice(0, 4)).map(b => b.toString(16))
+        });
+        
+        // 检测文件编码
+        let encoding = 'utf-8';
+        if (firstBytes[0] === 0xEF && firstBytes[1] === 0xBB && firstBytes[2] === 0xBF) {
+          encoding = 'utf-8';
+        } else if (firstBytes[0] === 0xFF && firstBytes[1] === 0xFE) {
+          encoding = 'utf-16le';
+        } else if (firstBytes[0] === 0xFE && firstBytes[1] === 0xFF) {
+          encoding = 'utf-16be';
+        } else {
+          // 尝试检测是否是 GB18030
+          try {
+            const decoder = new TextDecoder('gb18030');
+            const sample = decoder.decode(sampleBuffer);
+            const invalidCharCount = (sample.match(/\uFFFD/g) || []).length;
+            if (invalidCharCount < sample.length * 0.1) {
+              encoding = 'gb18030';
+            }
+          } catch (error) {
+            console.warn('GB18030 编码检测失败:', error);
+          }
+        }
+        
+        console.log('检测到的文件编码:', encoding);
+      }
+      
+      // 读取完整文件内容
       const fileContent = await file.arrayBuffer();
       
       // 创建临时URL
       const fileUrl = URL.createObjectURL(file);
-      
-      // 模拟上传延迟
-      await new Promise(resolve => setTimeout(resolve, 1000));
       
       setNotification({
         message: `文件 "${file.name}" 上传成功`,

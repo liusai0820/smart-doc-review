@@ -1,9 +1,9 @@
 import { useState, useEffect, useImperativeHandle, forwardRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Document } from "@/lib/mock-data";
-import { generateDocumentInsights } from "@/lib/document-insights-api";
-import { LightbulbIcon, Book, RefreshCw, BarChart3, AlertTriangle, CheckCircle2, FileSearch } from "lucide-react";
+import { LightbulbIcon, Book, RefreshCw, BarChart3, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Document, DocumentInsightsResult } from "@/lib/types";
+import { generateDocumentInsights } from "@/lib/document-insights-api";
+import { extractDocumentContent } from "@/lib/document-content-extraction";
 import {
   Accordion,
   AccordionContent,
@@ -100,10 +100,10 @@ const defaultInsightData: FallbackInsightsResult = {
   }
 };
 
-const DocumentInsights = forwardRef<DocumentInsightsRef, DocumentInsightsProps>(
+export const DocumentInsights = forwardRef<DocumentInsightsRef, DocumentInsightsProps>(
   ({ document }, ref) => {
     const [isGenerating, setIsGenerating] = useState(false);
-    const [insightData, setInsightData] = useState<FallbackInsightsResult | null>(null);
+    const [insightData, setInsightData] = useState<DocumentInsightsResult | null>(null);
 
     // 暴露startAnalysis方法给父组件
     useImperativeHandle(ref, () => ({
@@ -122,13 +122,29 @@ const DocumentInsights = forwardRef<DocumentInsightsRef, DocumentInsightsProps>(
       setIsGenerating(true);
       
       try {
-        // 尝试调用API生成洞察
-        // 如果generateDocumentInsights不可用，我们将使用模拟数据
-        let insights;
+        // 首先提取文档内容
+        const content = await extractDocumentContent(document);
         
+        // 验证内容
+        if (!content || content.trim().length < 10) {
+          throw new Error("文档内容为空或太短，无法进行分析");
+        }
+        
+        // 更新文档对象，确保包含提取的内容
+        const documentWithContent = {
+          ...document,
+          paragraphs: content.split('\n\n').map((text: string, index: number) => ({
+            id: index,
+            text: text.trim(),
+            changes: []
+          }))
+        };
+        
+        // 尝试调用API生成洞察
+        let insights;
         try {
           if (typeof generateDocumentInsights === 'function') {
-            insights = await generateDocumentInsights(document);
+            insights = await generateDocumentInsights(documentWithContent);
           } else {
             throw new Error("generateDocumentInsights function not available");
           }
@@ -143,7 +159,7 @@ const DocumentInsights = forwardRef<DocumentInsightsRef, DocumentInsightsProps>(
               title: document.title,
               documentType: document.title.includes("报告") ? "报告类文档" : "一般文档",
               mainPurpose: `描述${document.title}相关内容`,
-              keyPoints: document.paragraphs.slice(0, 3).map(p => p.text.substring(0, 30) + "..."),
+              keyPoints: documentWithContent.paragraphs.slice(0, 3).map(p => p.text.substring(0, 30) + "..."),
               overallQuality: 7,
               overallComment: "文档整体结构清晰，内容较为完整。"
             }
@@ -155,7 +171,7 @@ const DocumentInsights = forwardRef<DocumentInsightsRef, DocumentInsightsProps>(
         
         setInsightData(insights);
       } catch (error) {
-        console.error("生成洞察失败:", error);
+        console.error("生成文档洞察失败:", error);
         setInsightData(defaultInsightData);
       } finally {
         setIsGenerating(false);
@@ -204,226 +220,204 @@ const DocumentInsights = forwardRef<DocumentInsightsRef, DocumentInsightsProps>(
       }
     };
 
-    // 骨架屏组件
-    const InsightsSkeleton = () => (
-      <div className="space-y-6 animate-pulse">
-        <div className="space-y-4">
-          <div className="h-4 bg-gray-200 rounded-full w-1/3"></div>
-          <div className="space-y-2">
-            <div className="h-3 bg-gray-200 rounded-full w-full"></div>
-            <div className="h-3 bg-gray-200 rounded-full w-5/6"></div>
-            <div className="h-3 bg-gray-200 rounded-full w-4/6"></div>
-          </div>
-        </div>
-        <div className="space-y-4">
-          <div className="h-4 bg-gray-200 rounded-full w-1/4"></div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="h-24 bg-gray-200 rounded-lg"></div>
-            <div className="h-24 bg-gray-200 rounded-lg"></div>
-          </div>
-        </div>
-      </div>
-    );
-
     if (!document) {
       return (
-        <Card className="h-full">
-          <div className="empty-state">
-            <FileSearch className="empty-state-icon" />
-            <h3 className="empty-state-title">等待分析</h3>
-            <p className="empty-state-description">选择一个文档开始智能分析</p>
+        <div className="h-full flex flex-col items-center justify-center">
+          <BarChart3 className="h-8 w-8 text-gray-400 mb-3" />
+          <div className="text-sm text-center">
+            <p className="mb-1">暂无分析</p>
+            <p className="text-xs text-gray-400">请先选择一个文档</p>
           </div>
-        </Card>
+        </div>
       );
     }
 
     return (
-      <Card className="h-full">
-        <CardHeader className="pb-3">
-          <div className="flex justify-between items-center">
-            <CardTitle className="text-lg">文档分析</CardTitle>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="flex gap-1 items-center" 
-              onClick={handleGenerateInsights}
-              disabled={isGenerating}
-            >
-              <RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} />
-              <span>{isGenerating ? "分析中..." : "重新分析"}</span>
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
+      <div className="h-full flex flex-col">
+        <div className="mb-4">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex gap-1 items-center" 
+            onClick={handleGenerateInsights}
+            disabled={isGenerating}
+          >
+            <RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} />
+            <span>{isGenerating ? "分析中..." : "重新分析"}</span>
+          </Button>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-auto">
           {isGenerating ? (
-            <InsightsSkeleton />
-          ) : (
-            <div className="overflow-y-auto h-[calc(100vh-300px)]">
-              {insightData ? (
-                <Accordion type="single" collapsible defaultValue="summary" className="w-full space-y-4">
-                  {/* 文档概要 */}
-                  <AccordionItem value="summary" className="border rounded-lg overflow-hidden">
-                    <AccordionTrigger className="px-4 py-3 hover:bg-gray-50 [&[data-state=open]>div>svg]:rotate-180">
-                      <div className="flex items-center gap-2">
-                        <Book size={16} />
-                        <span>文档概要</span>
+            <div className="h-full flex flex-col items-center justify-center space-y-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+              <p className="text-sm text-gray-500">正在分析文档...</p>
+            </div>
+          ) : insightData ? (
+            <Accordion type="single" collapsible defaultValue="summary" className="w-full space-y-4">
+              {/* 文档概要 */}
+              <AccordionItem value="summary" className="border rounded-lg overflow-hidden">
+                <AccordionTrigger className="px-4 py-3 hover:bg-gray-50 [&[data-state=open]>div>svg]:rotate-180">
+                  <div className="flex items-center gap-2">
+                    <Book size={16} />
+                    <span>文档概要</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 py-3">
+                  <div className="space-y-4">
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h3 className="font-medium text-gray-900 mb-1">文档类型</h3>
+                      <p className="text-gray-700">{insightData.summary.documentType}</p>
+                    </div>
+                    
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h3 className="font-medium text-gray-900 mb-1">主要目的</h3>
+                      <p className="text-gray-700">{insightData.summary.mainPurpose}</p>
+                    </div>
+                    
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <h3 className="font-medium text-gray-900 mb-1">关键点</h3>
+                      <ul className="list-disc list-inside text-gray-700 space-y-1">
+                        {insightData.summary.keyPoints.map((point, i) => (
+                          <li key={i}>{point}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              {/* 详细分析 */}
+              <AccordionItem value="analysis" className="border rounded-lg overflow-hidden">
+                <AccordionTrigger className="px-4 py-3 hover:bg-gray-50 [&[data-state=open]>div>svg]:rotate-180">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 size={16} />
+                    <span>详细分析</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 py-3">
+                  <div className="space-y-4">
+                    {/* 结构分析 */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 p-3 border-b">
+                        <div className="flex justify-between items-center">
+                          <h3 className="font-medium">文档结构</h3>
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm font-medium">{insightData.detailedAnalysis.structure.rating}/10</span>
+                            <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-blue-500 rounded-full" 
+                                style={{ width: `${insightData.detailedAnalysis.structure.rating * 10}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-4 py-3">
-                      <div className="space-y-4">
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <h3 className="font-medium text-gray-900 mb-1">文档类型</h3>
-                          <p className="text-gray-700">{insightData.summary.documentType}</p>
+                      <div className="p-4">
+                        <p className="text-gray-700 mb-3">{insightData.detailedAnalysis.structure.analysis}</p>
+                      </div>
+                    </div>
+
+                    {/* 内容分析 */}
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="bg-gray-50 p-3 border-b">
+                        <div className="flex justify-between items-center">
+                          <h3 className="font-medium">内容质量</h3>
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm font-medium">{insightData.detailedAnalysis.content.rating}/10</span>
+                            <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-blue-500 rounded-full" 
+                                style={{ width: `${insightData.detailedAnalysis.content.rating * 10}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-4">
+                        <div className="mb-3">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">优势:</h4>
+                          <ul className="list-disc list-inside text-gray-600 space-y-1 text-sm">
+                            {insightData.detailedAnalysis.content.strengths.map((item, idx) => (
+                              <li key={idx}>{item}</li>
+                            ))}
+                          </ul>
                         </div>
                         
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <h3 className="font-medium text-gray-900 mb-1">主要目的</h3>
-                          <p className="text-gray-700">{insightData.summary.mainPurpose}</p>
-                        </div>
-                        
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <h3 className="font-medium text-gray-900 mb-1">关键点</h3>
-                          <ul className="list-disc list-inside text-gray-700 space-y-1">
-                            {insightData.summary.keyPoints.map((point, i) => (
-                              <li key={i}>{point}</li>
+                        <div className="mb-3">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">不足:</h4>
+                          <ul className="list-disc list-inside text-gray-600 space-y-1 text-sm">
+                            {insightData.detailedAnalysis.content.weaknesses.map((item, idx) => (
+                              <li key={idx}>{item}</li>
                             ))}
                           </ul>
                         </div>
                       </div>
-                    </AccordionContent>
-                  </AccordionItem>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
 
-                  {/* 详细分析 */}
-                  <AccordionItem value="analysis" className="border rounded-lg overflow-hidden">
-                    <AccordionTrigger className="px-4 py-3 hover:bg-gray-50 [&[data-state=open]>div>svg]:rotate-180">
-                      <div className="flex items-center gap-2">
-                        <BarChart3 size={16} />
-                        <span>详细分析</span>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-4 py-3">
-                      <div className="space-y-4">
-                        {/* 结构分析 */}
-                        <div className="border rounded-lg overflow-hidden">
-                          <div className="bg-gray-50 p-3 border-b">
-                            <div className="flex justify-between items-center">
-                              <h3 className="font-medium">文档结构</h3>
-                              <div className="flex items-center gap-1">
-                                <span className="text-sm font-medium">{insightData.detailedAnalysis.structure.rating}/10</span>
-                                <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                  <div 
-                                    className="h-full bg-blue-500 rounded-full" 
-                                    style={{ width: `${insightData.detailedAnalysis.structure.rating * 10}%` }}
-                                  ></div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="p-4">
-                            <p className="text-gray-700 mb-3">{insightData.detailedAnalysis.structure.analysis}</p>
-                          </div>
-                        </div>
-
-                        {/* 内容分析 */}
-                        <div className="border rounded-lg overflow-hidden">
-                          <div className="bg-gray-50 p-3 border-b">
-                            <div className="flex justify-between items-center">
-                              <h3 className="font-medium">内容质量</h3>
-                              <div className="flex items-center gap-1">
-                                <span className="text-sm font-medium">{insightData.detailedAnalysis.content.rating}/10</span>
-                                <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                  <div 
-                                    className="h-full bg-blue-500 rounded-full" 
-                                    style={{ width: `${insightData.detailedAnalysis.content.rating * 10}%` }}
-                                  ></div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="p-4">
-                            <div className="mb-3">
-                              <h4 className="text-sm font-medium text-gray-700 mb-2">优势:</h4>
-                              <ul className="list-disc list-inside text-gray-600 space-y-1 text-sm">
-                                {insightData.detailedAnalysis.content.strengths.map((item, idx) => (
-                                  <li key={idx}>{item}</li>
-                                ))}
-                              </ul>
-                            </div>
-                            
-                            <div className="mb-3">
-                              <h4 className="text-sm font-medium text-gray-700 mb-2">不足:</h4>
-                              <ul className="list-disc list-inside text-gray-600 space-y-1 text-sm">
-                                {insightData.detailedAnalysis.content.weaknesses.map((item, idx) => (
-                                  <li key={idx}>{item}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          </div>
+              {/* 改进建议 */}
+              <AccordionItem value="suggestions" className="border rounded-lg overflow-hidden">
+                <AccordionTrigger className="px-4 py-3 hover:bg-gray-50 [&[data-state=open]>div>svg]:rotate-180">
+                  <div className="flex items-center gap-2">
+                    <LightbulbIcon size={16} />
+                    <span>改进建议</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 py-3">
+                  <div className="space-y-4">
+                    <div className={`p-4 rounded-lg border ${getApprovalStyle(insightData.approvalSuggestion.status)}`}>
+                      <div className="flex items-start gap-3">
+                        {getApprovalIcon(insightData.approvalSuggestion.status)}
+                        <div>
+                          <h3 className="font-medium mb-1">
+                            {getApprovalText(insightData.approvalSuggestion.status)}
+                          </h3>
+                          <p className="text-gray-700">{insightData.approvalSuggestion.reason}</p>
                         </div>
                       </div>
-                    </AccordionContent>
-                  </AccordionItem>
-
-                  {/* 改进建议 */}
-                  <AccordionItem value="suggestions" className="border rounded-lg overflow-hidden">
-                    <AccordionTrigger className="px-4 py-3 hover:bg-gray-50 [&[data-state=open]>div>svg]:rotate-180">
-                      <div className="flex items-center gap-2">
-                        <LightbulbIcon size={16} />
-                        <span>改进建议</span>
+                    </div>
+                    
+                    {(insightData.approvalSuggestion.status === "needsRevision" || 
+                      insightData.approvalSuggestion.status === "rejected") && (
+                      <div className="bg-gray-50 p-4 rounded-lg">
+                        <h3 className="font-medium mb-2">需要重点修改的地方:</h3>
+                        <ul className="list-disc list-inside text-gray-700 space-y-1">
+                          {insightData.approvalSuggestion.revisionFocus.map((item, idx) => (
+                            <li key={idx}>{item}</li>
+                          ))}
+                        </ul>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-4 py-3">
-                      <div className="space-y-4">
-                        <div className={`p-4 rounded-lg border ${getApprovalStyle(insightData.approvalSuggestion.status)}`}>
-                          <div className="flex items-start gap-3">
-                            {getApprovalIcon(insightData.approvalSuggestion.status)}
-                            <div>
-                              <h3 className="font-medium mb-1">
-                                {getApprovalText(insightData.approvalSuggestion.status)}
-                              </h3>
-                              <p className="text-gray-700">{insightData.approvalSuggestion.reason}</p>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {(insightData.approvalSuggestion.status === "needsRevision" || 
-                          insightData.approvalSuggestion.status === "rejected") && (
-                          <div className="bg-gray-50 p-4 rounded-lg">
-                            <h3 className="font-medium mb-2">需要重点修改的地方:</h3>
-                            <ul className="list-disc list-inside text-gray-700 space-y-1">
-                              {insightData.approvalSuggestion.revisionFocus.map((item, idx) => (
-                                <li key={idx}>{item}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        
-                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                          <div className="flex gap-2">
-                            <LightbulbIcon size={16} className="text-blue-500 mt-0.5" />
-                            <div className="space-y-2">
-                              <p className="text-blue-800 text-sm">{insightData.detailedAnalysis.structure.recommendations}</p>
-                              <p className="text-blue-800 text-sm">{insightData.detailedAnalysis.content.recommendations}</p>
-                            </div>
-                          </div>
+                    )}
+                    
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                      <div className="flex gap-2">
+                        <LightbulbIcon size={16} className="text-blue-500 mt-0.5" />
+                        <div className="space-y-2">
+                          <p className="text-blue-800 text-sm">{insightData.detailedAnalysis.structure.recommendations}</p>
+                          <p className="text-blue-800 text-sm">{insightData.detailedAnalysis.content.recommendations}</p>
                         </div>
                       </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              ) : (
-                <div className="h-64 flex justify-center items-center">
-                  <p className="text-gray-500">点击&quot;重新分析&quot;按钮获取文档洞察</p>
-                </div>
-              )}
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center">
+              <BarChart3 className="h-8 w-8 text-gray-400 mb-3" />
+              <div className="text-sm text-center">
+                <p className="mb-1">等待分析</p>
+                <p className="text-xs text-gray-400">点击上方按钮开始分析</p>
+              </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 );
 
 DocumentInsights.displayName = "DocumentInsights";
-
-export default DocumentInsights;

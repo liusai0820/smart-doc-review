@@ -1,45 +1,5 @@
-import { Document } from "./mock-data";
 import { generateInsightsPrompt } from "./prompts/insights-prompt";
-
-// 文档洞察结果接口
-export interface DocumentInsightsResult {
-  summary: {
-    title: string;
-    documentType: string;
-    mainPurpose: string;
-    keyPoints: string[];
-    overallQuality: number;
-    overallComment: string;
-  };
-  detailedAnalysis: {
-    structure: {
-      rating: number;
-      analysis: string;
-      recommendations: string;
-    };
-    content: {
-      rating: number;
-      strengths: string[];
-      weaknesses: string[];
-      recommendations: string;
-    };
-    dataUsage: {
-      rating: number;
-      analysis: string;
-      recommendations: string;
-    };
-    expression: {
-      rating: number;
-      analysis: string;
-      recommendations: string;
-    };
-  };
-  approvalSuggestion: {
-    status: "approved" | "needsRevision" | "rejected";
-    reason: string;
-    revisionFocus: string[];
-  };
-}
+import { Document, DocumentInsightsResult } from "./types";
 
 // 默认的洞察结果（用于错误情况）
 const defaultInsightsResult: DocumentInsightsResult = {
@@ -91,9 +51,17 @@ export async function generateDocumentInsights(document: Document): Promise<Docu
     // 构建发送给LLM的文档内容
     const paragraphTexts = document.paragraphs.map(p => p.text).join('\n\n');
     
+    // 验证文档内容不为空
+    if (!paragraphTexts || paragraphTexts.trim() === '') {
+      console.error('警告：文档内容为空！');
+      throw new Error('文档内容为空，无法进行分析');
+    }
+
     console.log('开始生成文档洞察:', {
       title: document.title,
-      paragraphCount: document.paragraphs.length
+      paragraphCount: document.paragraphs.length,
+      contentLength: paragraphTexts.length,
+      contentPreview: paragraphTexts.substring(0, 100) + '...'
     });
 
     // 生成洞察提示词
@@ -109,7 +77,7 @@ export async function generateDocumentInsights(document: Document): Promise<Docu
         "X-Title": "Smart Doc Review - Insights"
       },
       body: JSON.stringify({
-        model: "anthropic/claude-3.5-sonnet", // 可以使用不同的模型
+        model: "anthropic/claude-3.5-sonnet",
         messages: [
           {
             role: "user",

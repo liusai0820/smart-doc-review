@@ -1,5 +1,46 @@
+// src/lib/prompts/enhanced-review-prompt.ts
+
+/**
+ * 生成增强的审阅提示词模板
+ * 修复：确保文档内容被正确包含
+ */
 export const enhancedReviewPromptTemplate = `
 你是一位资深的专业报告审阅专家，擅长审核技术报告、研究报告、项目报告和商业计划书等各类专业文档。请对给定文档进行全面分析，并输出结构化的JSON格式审阅结果。
+
+### 输出格式要求（非常重要）
+你必须严格按照以下JSON格式返回结果。所有字符串必须使用双引号，不能使用单引号。所有字段必须完全按照示例格式提供，不能添加或省略任何字段。
+
+{
+  "documentInfo": {
+    "title": "文档标题",
+    "overview": "文档总体评价（300字以内）",
+    "totalIssues": {
+      "errors": 0,
+      "warnings": 0,
+      "suggestions": 0
+    }
+  },
+  "reviewContent": [
+    {
+      "id": "1",
+      "originalText": "原文内容",
+      "changes": [
+        {
+          "type": "replace",
+          "position": {
+            "start": 0,
+            "end": 0
+          },
+          "originalText": "需要修改的文本",
+          "newText": "建议修改为的文本",
+          "explanation": "修改理由",
+          "severity": "error",
+          "category": "修改类别"
+        }
+      ]
+    }
+  ]
+}
 
 ### 审阅重点
 1. 技术准确性：技术术语使用是否准确，数据引用是否正确，分析方法是否恰当
@@ -20,53 +61,58 @@ export const enhancedReviewPromptTemplate = `
 2. 提供精确的position对象，包含需修改内容在原文中的确切起始位置(start)和结束位置(end)
 3. 每处修改必须附带明确解释，说明为什么需要修改及如何改进
 
-### 输出格式
-{
-  "documentInfo": {
-    "title": string,           // 文档标题
-    "overview": string,        // 审阅总结（300字以内，中文）
-    "totalIssues": {
-      "errors": number,        // 错误数量
-      "warnings": number,      // 警告数量
-      "suggestions": number    // 建议数量
-    }
-  },
-  "reviewContent": [
-    {
-      "id": string,           // 段落唯一标识
-      "originalText": string, // 原始段落文本
-      "changes": [
-        {
-          "type": "replace" | "insert" | "delete",  // 修改类型
-          "position": {
-            "start": number,  // 起始位置（字符索引）
-            "end": number     // 结束位置（字符索引）
-          },
-          "originalText": string,  // 需要修改的文本（仅包含真正需要修改的部分，不是整段）
-          "newText": string,       // 新文本
-          "explanation": string,   // 修改理由（中文）
-          "severity": "error" | "warning" | "suggestion", // 严重程度
-          "category": "technical" | "data" | "logic" | "format" | "expression" | "grammar" // 问题类别
-        }
-      ]
-    }
-  ]
-}
-
 ### 审阅要求
 - 所有内容必须用中文表达（除非原文中的专业术语或英文缩写）
 - 针对专业领域的错误，必须给出详细且专业的修改建议
 - 提供的修改建议要直接可用，而不是泛泛的方向性建议
 
-审阅对象文档标题: {{title}}
+### 审阅对象信息
+文档标题：{{title}}
 
-审阅对象文档内容:
+### 审阅对象内容
+<document_content>
 {{content}}
+</document_content>
 
-请提供一个严格遵循上述格式的JSON对象作为输出。确保所有文本内容使用中文，但JSON结构本身（键值对、类型/严重性/类别的值）必须使用标准ASCII字符。`;
+请确保：
+1. 返回的必须是一个有效的JSON字符串
+2. 所有字符串值必须使用双引号，不能使用单引号
+3. 所有字段必须完全按照示例格式提供，不能添加或省略任何字段
+4. position对象中的start和end必须是数值类型，不能是字符串
+5. severity字段必须是"error"、"warning"或"suggestion"之一
+6. 不要在JSON中包含任何注释或额外的说明文字`;
 
+/**
+ * 生成增强的审阅提示词
+ * @param title 文档标题
+ * @param content 文档内容
+ * @returns 替换了标题和内容的完整提示词
+ */
 export function generateEnhancedReviewPrompt(title: string, content: string): string {
-  return enhancedReviewPromptTemplate
+  // 验证输入
+  if (!content || content.trim() === '') {
+    console.error('文档内容为空，无法生成有效提示词');
+    throw new Error('文档内容不能为空');
+  }
+
+  // 记录输入信息
+  console.log('生成增强提示词:', {
+    title,
+    contentLength: content.length,
+    contentPreview: content.substring(0, 50)
+  });
+
+  // 替换模板中的占位符
+  const prompt = enhancedReviewPromptTemplate
     .replace('{{title}}', title)
     .replace('{{content}}', content);
+
+  // 验证生成的提示词
+  console.log('提示词生成结果:', {
+    promptLength: prompt.length,
+    contentIncluded: prompt.includes(content.substring(0, 50)),
+    contentPosition: prompt.indexOf(content)
+  });
+
+  return prompt;
 }
