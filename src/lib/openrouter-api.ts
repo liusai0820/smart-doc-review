@@ -59,7 +59,7 @@ export async function reviewDocumentWithLLM(
     // 从localStorage获取模型名称（如果未提供）
     const effectiveModelName = modelName || 
                              (typeof localStorage !== 'undefined' ? localStorage.getItem('llm_model') : null) || 
-                             "anthropic/claude-3.5-sonnet";
+                             "google/gemini-2.0-flash-exp:free";
     
     console.log('准备调用API:', {
       model: effectiveModelName,
@@ -85,12 +85,81 @@ export async function reviewDocumentWithLLM(
           }
         ],
         temperature: 0.3,
-        response_format: { type: "json_object" }
+        max_tokens: 4000,
+        top_p: 0.9,
+        frequency_penalty: 0,
+        presence_penalty: 0,
+        response_format: { 
+          type: "json_object",
+          schema: {
+            type: "object",
+            required: ["documentInfo", "reviewContent"],
+            additionalProperties: false,
+            properties: {
+              documentInfo: {
+                type: "object",
+                required: ["title", "overview", "totalIssues"],
+                additionalProperties: false,
+                properties: {
+                  title: { type: "string" },
+                  overview: { type: "string" },
+                  totalIssues: {
+                    type: "object",
+                    required: ["errors", "warnings", "suggestions"],
+                    additionalProperties: false,
+                    properties: {
+                      errors: { type: "integer", minimum: 0 },
+                      warnings: { type: "integer", minimum: 0 },
+                      suggestions: { type: "integer", minimum: 0 }
+                    }
+                  }
+                }
+              },
+              reviewContent: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: ["id", "originalText", "changes"],
+                  additionalProperties: false,
+                  properties: {
+                    id: { type: "string" },
+                    originalText: { type: "string" },
+                    changes: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        required: ["type", "position", "originalText", "newText", "explanation", "severity", "category"],
+                        additionalProperties: false,
+                        properties: {
+                          type: { type: "string", enum: ["replace", "insert", "delete"] },
+                          position: {
+                            type: "object",
+                            required: ["start", "end"],
+                            additionalProperties: false,
+                            properties: {
+                              start: { type: "integer", minimum: 0 },
+                              end: { type: "integer", minimum: 0 }
+                            }
+                          },
+                          originalText: { type: "string" },
+                          newText: { type: "string" },
+                          explanation: { type: "string" },
+                          severity: { type: "string", enum: ["error", "warning", "suggestion"] },
+                          category: { type: "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       })
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
       console.error('API请求失败:', {
         status: response.status,
         statusText: response.statusText,
@@ -99,7 +168,11 @@ export async function reviewDocumentWithLLM(
       throw new Error(`API请求失败: ${errorData.error?.message || response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await response.json().catch(e => {
+      console.error('解析API响应JSON失败:', e);
+      throw new Error(`解析API响应失败: ${e.message}`);
+    });
+    
     console.log('API原始响应数据:', data);
 
     if (!data.choices || !data.choices[0]?.message?.content) {
@@ -115,7 +188,13 @@ export async function reviewDocumentWithLLM(
 
     try {
       // 使用增强的 JSON 解析器处理响应
-      const result = parseRobustJSON(jsonString);
+      const result = parseRobustJSON(jsonString, document.title);
+
+      // 验证结果是否为空
+      if (!result || !result.documentInfo || !result.reviewContent) {
+        console.error('解析结果验证失败:', result);
+        throw new Error('解析结果验证失败，缺少必要的字段');
+      }
 
       // 规范化结果数据
       result.reviewContent = result.reviewContent.map((item: ReviewResult['reviewContent'][0]) => ({
@@ -132,15 +211,69 @@ export async function reviewDocumentWithLLM(
         }))
       }));
 
+      // 确保 totalIssues 字段存在
+      if (!result.documentInfo.totalIssues) {
+        result.documentInfo.totalIssues = {
+          errors: 0,
+          warnings: 0,
+          suggestions: 0
+        };
+      }
+
       return result;
     } catch (error) {
       console.error('处理API响应失败:', error);
       console.error('问题JSON字符串:', jsonString);
-      throw new Error(`解析API响应失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      
+      // 尝试创建一个最小可用的结果对象
+      const fallbackResult: ReviewResult = {
+        documentInfo: {
+          title: document.title || "未知文档",
+          overview: "文档解析过程中发生错误，无法提供完整分析。",
+          totalIssues: {
+            errors: 0,
+            warnings: 0,
+            suggestions: 0
+          }
+        },
+        reviewContent: document.paragraphs.map((p, index) => ({
+          id: String(index),
+          originalText: p.text,
+          changes: []
+        }))
+      };
+      
+      console.log('使用备用结果:', fallbackResult);
+      return fallbackResult;
     }
   } catch (error) {
     console.error("审阅文档失败:", error);
-    throw error;
+    
+    // 创建一个错误结果对象
+    const errorResult: ReviewResult = {
+      documentInfo: {
+        title: document.title || "未知文档",
+        overview: `审阅失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        totalIssues: {
+          errors: 1,
+          warnings: 0,
+          suggestions: 0
+        }
+      },
+      reviewContent: document.paragraphs.map((p, index) => ({
+        id: String(index),
+        originalText: p.text,
+        changes: []
+      }))
+    };
+    
+    // 在开发环境中抛出错误，在生产环境中返回错误结果
+    if (process.env.NODE_ENV === 'development') {
+      throw error;
+    } else {
+      console.log('返回错误结果:', errorResult);
+      return errorResult;
+    }
   }
 }
 

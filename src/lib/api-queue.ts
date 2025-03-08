@@ -17,7 +17,7 @@ interface QueueItem {
 // 队列配置
 const MAX_RETRIES = 2;
 const RETRY_DELAY = 3000;
-const DEFAULT_MODEL = "anthropic/claude-3.5-sonnet";
+const DEFAULT_MODEL = "google/gemini-2.0-flash-exp:free";
 const DEFAULT_TEMPERATURE = 0.3;
 
 // 请求队列

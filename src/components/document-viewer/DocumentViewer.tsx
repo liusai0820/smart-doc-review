@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { MessageSquare, FileText, Bug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,6 +10,7 @@ import ExportButton from "../ui/ExportButton";
 import DebugTools from "../ui/DebugTools";
 import { toast } from "sonner";
 import { extractDocumentContent } from "@/lib/document-content-extraction";
+import EnhancedReviewView from "./EnhancedReviewView";
 
 interface DocumentViewerProps {
   document: Document | null;
@@ -255,7 +256,7 @@ export default function DocumentViewer({
               </div>
             ) : (
               <div className="h-full overflow-auto">
-                <ChangesView 
+                <EnhancedReviewView 
                   paragraphs={aiReviewedParagraphs || document.paragraphs}
                   onAcceptChange={handleAcceptChange}
                   onRejectChange={handleRejectChange}

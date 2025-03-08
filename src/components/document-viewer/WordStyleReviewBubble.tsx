@@ -1,13 +1,12 @@
 import React from 'react';
 import { Check, X, AlertCircle, AlertTriangle, Info } from 'lucide-react';
-import { Change, ChangeSeverity } from '@/lib/mock-data';
 import { Button } from '@/components/ui/button';
+import { Change } from '@/lib/types';
 
 interface WordStyleReviewBubbleProps {
   change: Change;
   onAccept: () => void;
   onReject: () => void;
-  position: { top: number; left: number };
   isVisible: boolean;
 }
 
@@ -15,7 +14,6 @@ const WordStyleReviewBubble: React.FC<WordStyleReviewBubbleProps> = ({
   change,
   onAccept,
   onReject,
-  position,
   isVisible
 }) => {
   if (!isVisible) return null;
@@ -31,7 +29,7 @@ const WordStyleReviewBubble: React.FC<WordStyleReviewBubbleProps> = ({
   };
   
   // 获取不同严重性的样式和图标
-  const getSeverityInfo = (severity: ChangeSeverity) => {
+  const getSeverityInfo = (severity: string) => {
     switch (severity) {
       case 'error':
         return {
@@ -58,12 +56,10 @@ const WordStyleReviewBubble: React.FC<WordStyleReviewBubbleProps> = ({
   
   return (
     <div 
-      className={`fixed z-50 shadow-lg border rounded-lg overflow-hidden ${severityInfo.color}`}
+      className={`shadow-lg border rounded-lg overflow-hidden ${severityInfo.color}`}
       style={{ 
-        top: `${position.top}px`, 
-        left: `${position.left}px`,
         transform: 'translate(-50%, -100%)',
-        marginTop: '-10px',
+        marginTop: '-8px',
         width: '320px',
         maxWidth: 'calc(100vw - 40px)'
       }}
@@ -80,14 +76,20 @@ const WordStyleReviewBubble: React.FC<WordStyleReviewBubbleProps> = ({
         </div>
         <div className="flex gap-1">
           <button
-            onClick={onReject}
+            onClick={(e) => {
+              e.stopPropagation();
+              onReject();
+            }}
             className="p-1 rounded-full hover:bg-white/30"
             title="拒绝修改"
           >
             <X size={14} />
           </button>
           <button
-            onClick={onAccept}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAccept();
+            }}
             className="p-1 rounded-full hover:bg-white/30"
             title="接受修改"
           >
@@ -128,7 +130,10 @@ const WordStyleReviewBubble: React.FC<WordStyleReviewBubbleProps> = ({
             variant="outline" 
             size="sm"
             className="h-7 px-2 text-xs border-red-200 text-red-600 hover:bg-red-50"
-            onClick={onReject}
+            onClick={(e) => {
+              e.stopPropagation();
+              onReject();
+            }}
           >
             <X className="h-3 w-3 mr-1" />
             拒绝
@@ -137,23 +142,16 @@ const WordStyleReviewBubble: React.FC<WordStyleReviewBubbleProps> = ({
             variant="outline" 
             size="sm"
             className="h-7 px-2 text-xs border-green-200 text-green-600 hover:bg-green-50"
-            onClick={onAccept}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAccept();
+            }}
           >
             <Check className="h-3 w-3 mr-1" />
             接受
           </Button>
         </div>
       </div>
-      
-      {/* 箭头指示器 */}
-      <div 
-        className={`absolute w-3 h-3 transform rotate-45 ${
-          change.severity === 'error' ? 'bg-red-50 border-b border-r border-red-200' :
-          change.severity === 'warning' ? 'bg-yellow-50 border-b border-r border-yellow-200' :
-          'bg-blue-50 border-b border-r border-blue-200'
-        }`}
-        style={{ bottom: '-6px', left: '50%', marginLeft: '-4px' }}
-      ></div>
     </div>
   );
 };

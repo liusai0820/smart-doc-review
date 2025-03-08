@@ -1,5 +1,4 @@
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Paragraph, Change } from "@/lib/mock-data";
 import ChangeHighlight from "../ui/ChangeHighlight";
 
 interface DiffViewProps {
@@ -25,9 +24,12 @@ export default function DiffView({ paragraphs }: DiffViewProps) {
           ];
 
           // 按位置排序变更
+          // 在排序变更的部分，优先使用position信息
           const sortedChanges = [...paragraph.changes].sort((a, b) => {
-            const posA = a.original ? paragraph.text.indexOf(a.original) : paragraph.text.length;
-            const posB = b.original ? paragraph.text.indexOf(b.original) : paragraph.text.length;
+            const posA = a.position?.start ?? 
+                        (a.original ? paragraph.text.indexOf(a.original) : paragraph.text.length);
+            const posB = b.position?.start ?? 
+                        (b.original ? paragraph.text.indexOf(b.original) : paragraph.text.length);
             return posA - posB;
           });
 
