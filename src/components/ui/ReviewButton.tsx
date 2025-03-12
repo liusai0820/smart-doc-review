@@ -42,12 +42,45 @@ export default function ReviewButton({
     try {
       // 确保文档内容正确处理
       const documentContent = document.paragraphs
-        .map(p => typeof p.text === 'string' ? p.text : '')
+        .map(p => {
+          // 处理HTML内容，去除HTML标签
+          if (typeof p.text === 'string') {
+            return p.isHtml 
+              ? p.text.replace(/<[^>]*>/g, '') 
+              : p.text;
+          }
+          return '';
+        })
         .filter(text => text.trim() !== '')
         .join('\n\n');
       
+      // 获取模板
+      const template = getTemplateById(templateId);
+      
+      // 根据模板类型进行预处理
+      let enhancedContent = documentContent;
+      
+      // 如果是公文类，添加公文格式检查信息
+      if (template.category === "公文" || template.category === "党政文件") {
+        // 获取公文格式指南
+        const formatGuide = getFormatGuideByType(template.name);
+        if (formatGuide) {
+          // 简单检查公文格式要素
+          const elements = formatGuide.commonElements || [];
+          const missingRequired = elements
+            .filter((e: { required: boolean; name: string }) => e.required)
+            .filter((e: { name: string }) => !documentContent.includes(e.name))
+            .map((e: { name: string }) => e.name);
+          
+          if (missingRequired.length > 0) {
+            // 添加公文格式提示
+            enhancedContent = `[公文格式提示] 该文档可能缺少以下必要的公文要素: ${missingRequired.join(', ')}。\n\n${documentContent}`;
+          }
+        }
+      }
+      
       // 生成基于模板的提示词
-      const customPrompt = generatePromptFromTemplate(templateId, document.title, documentContent);
+      const customPrompt = generatePromptFromTemplate(templateId, document.title, enhancedContent);
       
       // 从localStorage获取API密钥和模型设置
       const storedApiKey = localStorage.getItem('openrouter_api_key');
@@ -56,13 +89,15 @@ export default function ReviewButton({
       // 添加日志调试
       console.log('审阅配置:', {
         templateId,
+        templateName: template.name,
+        templateCategory: template.category,
         documentTitle: document.title,
-        contentLength: documentContent.length,
+        contentLength: enhancedContent.length,
         storedModel,
         hasStoredApiKey: !!storedApiKey
       });
       
-      // 调用审阅API
+      // 调用审阅API，使用增强的审阅提示词
       const reviewResult = await reviewDocumentWithLLM(
         document,
         storedApiKey || undefined,
@@ -116,4 +151,15 @@ export default function ReviewButton({
       />
     </>
   );
+}
+
+// Define getTemplateById and getFormatGuideByType functions
+function getTemplateById(templateId: string): { name: string; category: string } {
+  // Mock implementation
+  return { name: "Template Name", category: "Category" };
+}
+
+function getFormatGuideByType(type: string): { commonElements: { required: boolean; name: string }[] } {
+  // Mock implementation
+  return { commonElements: [{ required: true, name: "Element Name" }] };
 }

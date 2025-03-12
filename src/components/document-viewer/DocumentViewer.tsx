@@ -1,3 +1,5 @@
+import DocumentFormatChecker from '../ui/DocumentFormatChecker';
+import FormatGuideButton from '../ui/FormatGuideButton';
 import { useState } from "react";
 import { MessageSquare, FileText, Bug, FileX } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -146,6 +148,7 @@ export default function DocumentViewer({ document, onReviewComplete }: DocumentV
               document={aiReviewedParagraphs ? {...document, paragraphs: aiReviewedParagraphs} : document} 
               isLoading={isReviewing}
             />
+            <FormatGuideButton document={document} />
             {process.env.NEXT_PUBLIC_ENABLE_DEBUG === 'true' && (
               <Button
                 variant="outline"

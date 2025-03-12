@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { X, BookOpen, Tag, CheckCircle2 } from "lucide-react";
+import { X, BookOpen, Tag, CheckCircle2, HelpCircle } from "lucide-react";
 import { ReviewTemplate, getTemplatesByCategory, recommendTemplate } from "@/lib/review-templates";
 import { Document } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { getFormatGuideByType } from "@/lib/document-format-guide"; // 导入格式指南函数
 
 interface TemplateSelectionDialogProps {
   isOpen: boolean;
@@ -24,6 +25,8 @@ export default function TemplateSelectionDialog({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [categorizedTemplates, setCategorizedTemplates] = useState<Record<string, ReviewTemplate[]>>({});
   const [recommendedTemplateId, setRecommendedTemplateId] = useState<string>("");
+  const [showFormatGuide, setShowFormatGuide] = useState(false);
+  const [formatGuide, setFormatGuide] = useState<any>(null);
 
   useEffect(() => {
     if (document && isOpen) {
@@ -35,8 +38,30 @@ export default function TemplateSelectionDialog({
       const recommended = recommendTemplate(document.title, docContent);
       setRecommendedTemplateId(recommended);
       setSelectedTemplateId(recommended);
+      
+      // 获取对应的格式指南
+      const template = categorizedTemplates[recommendTemplate(document.title, docContent)];
+      if (template) {
+        const guide = getFormatGuideByType(template.name);
+        setFormatGuide(guide);
+      }
     }
   }, [document, isOpen]);
+
+  // 当选择的模板改变时，更新格式指南
+  useEffect(() => {
+    if (selectedTemplateId && Object.keys(categorizedTemplates).length > 0) {
+      // 查找选择的模板
+      const selectedTemplate = Object.values(categorizedTemplates)
+        .flat()
+        .find(template => template.id === selectedTemplateId);
+      
+      if (selectedTemplate) {
+        const guide = getFormatGuideByType(selectedTemplate.name);
+        setFormatGuide(guide);
+      }
+    }
+  }, [selectedTemplateId, categorizedTemplates]);
 
   if (!isOpen || !document) return null;
 
@@ -45,6 +70,99 @@ export default function TemplateSelectionDialog({
       onSelectTemplate(selectedTemplateId);
       onClose();
     }
+  };
+
+  // 渲染格式指南
+  const renderFormatGuide = () => {
+    if (!formatGuide) return <p>没有找到对应的格式指南</p>;
+
+    if (formatGuide.commonElements) {
+      // 公文格式指南
+      return (
+        <div className="p-4 bg-gray-50 rounded-lg border max-h-96 overflow-y-auto">
+          <h3 className="font-medium text-lg mb-3">公文格式指南</h3>
+          
+          <div className="mb-4">
+            <h4 className="font-medium mb-2 text-gray-700">公文通用格式要素</h4>
+            <div className="space-y-2">
+              {formatGuide.commonElements.slice(0, 5).map((element: any, index: number) => (
+                <div key={index} className="p-2 bg-white rounded border">
+                  <div className="flex justify-between">
+                    <span className="font-medium">{element.name}</span>
+                    {element.required && <span className="text-red-500 text-xs">必需</span>}
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">{element.description}</p>
+                  {element.example && (
+                    <p className="text-xs text-gray-500 mt-1">示例: {element.example}</p>
+                  )}
+                </div>
+              ))}
+              {formatGuide.commonElements.length > 5 && (
+                <p className="text-xs text-gray-500 text-center mt-1">
+                  +还有{formatGuide.commonElements.length - 5}个要素 (点击查看格式指南查看更多)
+                </p>
+              )}
+            </div>
+          </div>
+          
+          <div>
+            <h4 className="font-medium mb-2 text-gray-700">公文语言要求</h4>
+            <div className="space-y-2">
+              {formatGuide.languageRequirements && formatGuide.languageRequirements.slice(0, 3).map((req: any, index: number) => (
+                <div key={index} className="p-2 bg-white rounded border">
+                  <span className="font-medium">{req.requirement}</span>
+                  <p className="text-sm text-gray-600 mt-1">{req.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    } else if (formatGuide.basicStructure) {
+      // 学术论文格式指南
+      return (
+        <div className="p-4 bg-gray-50 rounded-lg border max-h-96 overflow-y-auto">
+          <h3 className="font-medium text-lg mb-3">学术论文格式指南</h3>
+          
+          <div className="mb-4">
+            <h4 className="font-medium mb-2 text-gray-700">论文基本结构</h4>
+            <div className="space-y-2">
+              {formatGuide.basicStructure.slice(0, 5).map((section: any, index: number) => (
+                <div key={index} className="p-2 bg-white rounded border">
+                  <span className="font-medium">{section.section}</span>
+                  <p className="text-sm text-gray-600 mt-1">{section.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    } else if (formatGuide.proposalFormat) {
+      // 项目文档格式指南
+      return (
+        <div className="p-4 bg-gray-50 rounded-lg border max-h-96 overflow-y-auto">
+          <h3 className="font-medium text-lg mb-3">项目文档格式指南</h3>
+          
+          <div className="mb-4">
+            <h4 className="font-medium mb-2 text-gray-700">项目立项书格式</h4>
+            <div className="space-y-2">
+              {formatGuide.proposalFormat.slice(0, 3).map((section: any, index: number) => (
+                <div key={index} className="p-2 bg-white rounded border">
+                  <span className="font-medium">{section.section}</span>
+                  <ul className="list-disc list-inside text-sm text-gray-600 mt-1">
+                    {section.contents.map((item: string, i: number) => (
+                      <li key={i}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    return <p>无法识别的格式指南类型</p>;
   };
 
   return (
@@ -86,7 +204,7 @@ export default function TemplateSelectionDialog({
                       key={template.id}
                       className="border border-blue-200 bg-blue-50 rounded-lg p-4"
                     >
-                      <div className="flex justify-between items-start">
+                      <div className="flex justify-between items-start mb-3">
                         <div>
                           <div className="flex items-center">
                             <h3 className="font-medium">{template.name}</h3>
@@ -115,6 +233,22 @@ export default function TemplateSelectionDialog({
                           ))}
                         </div>
                       </div>
+                      
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mt-3 text-blue-600"
+                        onClick={() => setShowFormatGuide(!showFormatGuide)}
+                      >
+                        <HelpCircle className="h-4 w-4 mr-1" />
+                        {showFormatGuide ? "隐藏格式指南" : "查看格式指南"}
+                      </Button>
+                      
+                      {showFormatGuide && (
+                        <div className="mt-3">
+                          {renderFormatGuide()}
+                        </div>
+                      )}
                     </div>
                   );
                 }
@@ -195,6 +329,26 @@ export default function TemplateSelectionDialog({
                   ))}
                 </RadioGroup>
               </div>
+              
+              {selectedTemplateId && (
+                <div className="mt-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-blue-600"
+                    onClick={() => setShowFormatGuide(!showFormatGuide)}
+                  >
+                    <HelpCircle className="h-4 w-4 mr-1" />
+                    {showFormatGuide ? "隐藏格式指南" : "查看格式指南"}
+                  </Button>
+                  
+                  {showFormatGuide && (
+                    <div className="mt-3">
+                      {renderFormatGuide()}
+                    </div>
+                  )}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </div>

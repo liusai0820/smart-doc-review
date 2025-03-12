@@ -1,18 +1,17 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Document } from "@/lib/mock-data";
 import { generateDocumentInsights } from "@/lib/document-insights-api";
-import { LightbulbIcon, Book, FileCheck, RefreshCw, BarChart3, AlertTriangle, CheckCircle2, FileSearch } from "lucide-react";
+import { LightbulbIcon, Book, FileCheck, RefreshCw, BarChart3, AlertTriangle, CheckCircle2, FileSearch, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import CollapsibleSection from "@/components/ui/collapsible-section";
 
 interface DocumentInsightsProps {
   document: Document | null;
 }
 
-// 假设这个类型在document-insights-api.ts中定义
-// 如果找不到，我们在这里定义一个兼容的类型
+// 接口定义保持不变
 interface FallbackInsightsResult {
   summary: {
     title: string;
@@ -52,7 +51,7 @@ interface FallbackInsightsResult {
   };
 }
 
-// 默认值，在无法从API获取时使用
+// 默认值保持不变
 const defaultInsightData: FallbackInsightsResult = {
   summary: {
     title: "",
@@ -93,12 +92,8 @@ const defaultInsightData: FallbackInsightsResult = {
 };
 
 export default function DocumentInsights({ document }: DocumentInsightsProps) {
-  const [activeTab, setActiveTab] = useState("summary");
   const [isGenerating, setIsGenerating] = useState(false);
   const [insightData, setInsightData] = useState<FallbackInsightsResult | null>(null);
-  const [isSummaryOpen, setIsSummaryOpen] = useState(true);
-  const [isAnalysisOpen, setIsAnalysisOpen] = useState(true);
-  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(true);
 
   // 在文档变更时重置洞察数据
   useEffect(() => {
@@ -113,7 +108,6 @@ export default function DocumentInsights({ document }: DocumentInsightsProps) {
     
     try {
       // 尝试调用API生成洞察
-      // 如果generateDocumentInsights不可用，我们将使用模拟数据
       let insights;
       
       try {
@@ -207,7 +201,7 @@ export default function DocumentInsights({ document }: DocumentInsightsProps) {
       </div>
       <div className="space-y-4">
         <div className="h-4 bg-gray-200 rounded-full w-1/4"></div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4">
           <div className="h-24 bg-gray-200 rounded-lg"></div>
           <div className="h-24 bg-gray-200 rounded-lg"></div>
         </div>
@@ -247,204 +241,224 @@ export default function DocumentInsights({ document }: DocumentInsightsProps) {
       <CardContent>
         {isGenerating ? (
           <InsightsSkeleton />
-        ) : (
-          <Tabs 
-            value={activeTab} 
-            onValueChange={setActiveTab}
-            className="w-full"
-          >
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="summary" className="flex items-center gap-1">
-                <Book size={14} />
-                <span>概要</span>
-              </TabsTrigger>
-              <TabsTrigger value="analysis" className="flex items-center gap-1">
-                <BarChart3 size={14} />
-                <span>深度分析</span>
-              </TabsTrigger>
-              <TabsTrigger value="approval" className="flex items-center gap-1">
-                <FileCheck size={14} />
-                <span>审批建议</span>
-              </TabsTrigger>
-            </TabsList>
-            
-            <div className="mt-4 overflow-y-auto h-[calc(100vh-300px)]">
-              <TabsContent value="summary" className="mt-0">
-                {isGenerating ? (
-                  <div className="h-64 flex flex-col justify-center items-center gap-4">
-                    <p className="text-gray-500">正在生成文档洞察...</p>
-                    <Progress value={45} />
+        ) : insightData ? (
+          <div className="space-y-4 overflow-y-auto h-[calc(100vh-280px)] pr-1">
+            {/* 文档概要 */}
+            <CollapsibleSection 
+              title="文档概要" 
+              icon={<Book size={16} className="text-blue-500" />}
+              defaultOpen={true}
+            >
+              <div className="space-y-4">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-medium text-gray-900 mb-1">文档类型</h3>
+                  <p className="text-gray-700">{insightData.summary.documentType}</p>
+                </div>
+                
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-medium text-gray-900 mb-1">主要目的</h3>
+                  <p className="text-gray-700">{insightData.summary.mainPurpose}</p>
+                </div>
+                
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-medium text-gray-900 mb-1">关键点</h3>
+                  <ul className="list-disc list-inside text-gray-700 space-y-1">
+                    {insightData.summary.keyPoints.map((point, i) => (
+                      <li key={i}>{point}</li>
+                    ))}
+                  </ul>
+                </div>
+                
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex justify-between mb-2">
+                    <h3 className="font-medium text-gray-900">整体质量评分</h3>
+                    <span className="font-medium text-blue-600">{insightData.summary.overallQuality}/10</span>
                   </div>
-                ) : insightData ? (
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h3 className="font-medium text-gray-900 mb-1">文档类型</h3>
-                      <p className="text-gray-700">{insightData.summary.documentType}</p>
+                  <Progress 
+                    value={insightData.summary.overallQuality * 10} 
+                    className="h-2 mb-3"
+                  />
+                  <p className="text-gray-700">{insightData.summary.overallComment}</p>
+                </div>
+              </div>
+            </CollapsibleSection>
+            
+            {/* 深度分析 */}
+            <CollapsibleSection 
+              title="深度分析" 
+              icon={<BarChart3 size={16} className="text-blue-500" />}
+              defaultOpen={true}
+            >
+              <div className="space-y-4">
+                {/* 结构分析 */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 p-3 border-b">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-medium">文档结构</h3>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm font-medium">{insightData.detailedAnalysis.structure.rating}/10</span>
+                        <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500 rounded-full" 
+                            style={{ width: `${insightData.detailedAnalysis.structure.rating * 10}%` }}
+                          ></div>
+                        </div>
+                      </div>
                     </div>
+                  </div>
+                  <div className="p-4">
+                    <p className="text-gray-700 mb-3">{insightData.detailedAnalysis.structure.analysis}</p>
                     
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h3 className="font-medium text-gray-900 mb-1">主要目的</h3>
-                      <p className="text-gray-700">{insightData.summary.mainPurpose}</p>
+                    <div className="bg-blue-50 p-3 rounded border border-blue-100">
+                      <div className="flex gap-2">
+                        <LightbulbIcon size={16} className="text-blue-500 mt-0.5" />
+                        <p className="text-blue-800 text-sm">{insightData.detailedAnalysis.structure.recommendations}</p>
+                      </div>
                     </div>
-                    
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <h3 className="font-medium text-gray-900 mb-1">关键点</h3>
-                      <ul className="list-disc list-inside text-gray-700 space-y-1">
-                        {insightData.summary.keyPoints.map((point, i) => (
-                          <li key={i}>{point}</li>
+                  </div>
+                </div>
+                
+                {/* 内容分析 */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 p-3 border-b">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-medium">内容质量</h3>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm font-medium">{insightData.detailedAnalysis.content.rating}/10</span>
+                        <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500 rounded-full" 
+                            style={{ width: `${insightData.detailedAnalysis.content.rating * 10}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <div className="mb-3">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">优势:</h4>
+                      <ul className="list-disc list-inside text-gray-600 space-y-1 text-sm">
+                        {insightData.detailedAnalysis.content.strengths.map((item, idx) => (
+                          <li key={idx}>{item}</li>
                         ))}
                       </ul>
                     </div>
                     
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <div className="flex justify-between mb-2">
-                        <h3 className="font-medium text-gray-900">整体质量评分</h3>
-                        <span className="font-medium text-blue-600">{insightData.summary.overallQuality}/10</span>
-                      </div>
-                      <Progress 
-                        value={insightData.summary.overallQuality * 10} 
-                        className="h-2 mb-3"
-                      />
-                      <p className="text-gray-700">{insightData.summary.overallComment}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="h-64 flex justify-center items-center">
-                    <p className="text-gray-500">点击&quot;开始分析&quot;按钮获取文档洞察</p>
-                  </div>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="analysis" className="mt-0">
-                {isGenerating ? (
-                  <div className="h-64 flex flex-col justify-center items-center gap-4">
-                    <p className="text-gray-500">正在分析文档...</p>
-                    <Progress value={65} />
-                  </div>
-                ) : insightData ? (
-                  <div className="space-y-6">
-                    {/* 结构分析 */}
-                    <div className="border rounded-lg overflow-hidden">
-                      <div className="bg-gray-50 p-3 border-b">
-                        <div className="flex justify-between items-center">
-                          <h3 className="font-medium">文档结构</h3>
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm font-medium">{insightData.detailedAnalysis.structure.rating}/10</span>
-                            <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-blue-500 rounded-full" 
-                                style={{ width: `${insightData.detailedAnalysis.structure.rating * 10}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="p-4">
-                        <p className="text-gray-700 mb-3">{insightData.detailedAnalysis.structure.analysis}</p>
-                        
-                        <div className="bg-blue-50 p-3 rounded border border-blue-100">
-                          <div className="flex gap-2">
-                            <LightbulbIcon size={16} className="text-blue-500 mt-0.5" />
-                            <p className="text-blue-800 text-sm">{insightData.detailedAnalysis.structure.recommendations}</p>
-                          </div>
-                        </div>
-                      </div>
+                    <div className="mb-3">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">不足:</h4>
+                      <ul className="list-disc list-inside text-gray-600 space-y-1 text-sm">
+                        {insightData.detailedAnalysis.content.weaknesses.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
                     </div>
                     
-                    {/* 内容分析 */}
-                    <div className="border rounded-lg overflow-hidden">
-                      <div className="bg-gray-50 p-3 border-b">
-                        <div className="flex justify-between items-center">
-                          <h3 className="font-medium">内容质量</h3>
-                          <div className="flex items-center gap-1">
-                            <span className="text-sm font-medium">{insightData.detailedAnalysis.content.rating}/10</span>
-                            <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-blue-500 rounded-full" 
-                                style={{ width: `${insightData.detailedAnalysis.content.rating * 10}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        </div>
+                    <div className="bg-blue-50 p-3 rounded border border-blue-100">
+                      <div className="flex gap-2">
+                        <LightbulbIcon size={16} className="text-blue-500 mt-0.5" />
+                        <p className="text-blue-800 text-sm">{insightData.detailedAnalysis.content.recommendations}</p>
                       </div>
-                      <div className="p-4">
-                        <div className="mb-3">
-                          <h4 className="text-sm font-medium text-gray-700 mb-2">优势:</h4>
-                          <ul className="list-disc list-inside text-gray-600 space-y-1 text-sm">
-                            {insightData.detailedAnalysis.content.strengths.map((item, idx) => (
-                              <li key={idx}>{item}</li>
-                            ))}
-                          </ul>
-                        </div>
-                        
-                        <div className="mb-3">
-                          <h4 className="text-sm font-medium text-gray-700 mb-2">不足:</h4>
-                          <ul className="list-disc list-inside text-gray-600 space-y-1 text-sm">
-                            {insightData.detailedAnalysis.content.weaknesses.map((item, idx) => (
-                              <li key={idx}>{item}</li>
-                            ))}
-                          </ul>
-                        </div>
-                        
-                        <div className="bg-blue-50 p-3 rounded border border-blue-100">
-                          <div className="flex gap-2">
-                            <LightbulbIcon size={16} className="text-blue-500 mt-0.5" />
-                            <p className="text-blue-800 text-sm">{insightData.detailedAnalysis.content.recommendations}</p>
-                          </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* 数据使用分析 */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 p-3 border-b">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-medium">数据使用</h3>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm font-medium">{insightData.detailedAnalysis.dataUsage.rating}/10</span>
+                        <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500 rounded-full" 
+                            style={{ width: `${insightData.detailedAnalysis.dataUsage.rating * 10}%` }}
+                          ></div>
                         </div>
                       </div>
                     </div>
+                  </div>
+                  <div className="p-4">
+                    <p className="text-gray-700 mb-3">{insightData.detailedAnalysis.dataUsage.analysis}</p>
                     
-                    {/* 其他分析部分 */}
-                    {/* ... 省略数据使用、表达分析部分，与上面类似 ... */}
+                    <div className="bg-blue-50 p-3 rounded border border-blue-100">
+                      <div className="flex gap-2">
+                        <LightbulbIcon size={16} className="text-blue-500 mt-0.5" />
+                        <p className="text-blue-800 text-sm">{insightData.detailedAnalysis.dataUsage.recommendations}</p>
+                      </div>
+                    </div>
                   </div>
-                ) : (
-                  <div className="h-64 flex justify-center items-center">
-                    <p className="text-gray-500">点击&quot;开始分析&quot;按钮获取深度分析</p>
-                  </div>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="approval" className="mt-0">
-                {isGenerating ? (
-                  <div className="h-64 flex flex-col justify-center items-center gap-4">
-                    <p className="text-gray-500">正在生成审批建议...</p>
-                    <Progress value={85} />
-                  </div>
-                ) : insightData ? (
-                  <div className="space-y-4">
-                    <div className={`p-4 rounded-lg border ${getApprovalStyle(insightData.approvalSuggestion.status)}`}>
-                      <div className="flex items-start gap-3">
-                        {getApprovalIcon(insightData.approvalSuggestion.status)}
-                        <div>
-                          <h3 className="font-medium mb-1">
-                            {getApprovalText(insightData.approvalSuggestion.status)}
-                          </h3>
-                          <p className="text-gray-700">{insightData.approvalSuggestion.reason}</p>
+                </div>
+                
+                {/* 表达分析 */}
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-gray-50 p-3 border-b">
+                    <div className="flex justify-between items-center">
+                      <h3 className="font-medium">表达风格</h3>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm font-medium">{insightData.detailedAnalysis.expression.rating}/10</span>
+                        <div className="w-20 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-blue-500 rounded-full" 
+                            style={{ width: `${insightData.detailedAnalysis.expression.rating * 10}%` }}
+                          ></div>
                         </div>
                       </div>
                     </div>
-                    
-                    {(insightData.approvalSuggestion.status === "needsRevision" || 
-                      insightData.approvalSuggestion.status === "rejected") && (
-                      <div className="bg-gray-50 p-4 rounded-lg border">
-                        <h3 className="font-medium mb-2">需要重点修改的地方:</h3>
-                        <ul className="list-disc list-inside text-gray-700 space-y-1">
-                          {insightData.approvalSuggestion.revisionFocus.map((item, idx) => (
-                            <li key={idx}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
                   </div>
-                ) : (
-                  <div className="h-64 flex justify-center items-center">
-                    <p className="text-gray-500">点击&quot;开始分析&quot;按钮获取审批建议</p>
+                  <div className="p-4">
+                    <p className="text-gray-700 mb-3">{insightData.detailedAnalysis.expression.analysis}</p>
+                    
+                    <div className="bg-blue-50 p-3 rounded border border-blue-100">
+                      <div className="flex gap-2">
+                        <LightbulbIcon size={16} className="text-blue-500 mt-0.5" />
+                        <p className="text-blue-800 text-sm">{insightData.detailedAnalysis.expression.recommendations}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CollapsibleSection>
+            
+            {/* 审批建议 */}
+            <CollapsibleSection 
+              title="审批建议" 
+              icon={<FileCheck size={16} className="text-blue-500" />}
+              defaultOpen={true}
+            >
+              <div className="space-y-4">
+                <div className={`p-4 rounded-lg border ${getApprovalStyle(insightData.approvalSuggestion.status)}`}>
+                  <div className="flex items-start gap-3">
+                    {getApprovalIcon(insightData.approvalSuggestion.status)}
+                    <div>
+                      <h3 className="font-medium mb-1">
+                        {getApprovalText(insightData.approvalSuggestion.status)}
+                      </h3>
+                      <p className="text-gray-700">{insightData.approvalSuggestion.reason}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                {(insightData.approvalSuggestion.status === "needsRevision" || 
+                  insightData.approvalSuggestion.status === "rejected") && (
+                  <div className="bg-gray-50 p-4 rounded-lg border">
+                    <h3 className="font-medium mb-2">需要重点修改的地方:</h3>
+                    <ul className="list-disc list-inside text-gray-700 space-y-1">
+                      {insightData.approvalSuggestion.revisionFocus.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
                   </div>
                 )}
-              </TabsContent>
-            </div>
-          </Tabs>
+              </div>
+            </CollapsibleSection>
+          </div>
+        ) : (
+          <div className="h-[calc(100vh-280px)] flex flex-col justify-center items-center">
+            <FileText className="h-12 w-12 text-gray-300 mb-4" />
+            <p className="text-gray-500 mb-3">点击"开始分析"按钮获取文档洞察</p>
+            <p className="text-xs text-gray-400">AI将对文档进行多维度分析并提供专业建议</p>
+          </div>
         )}
       </CardContent>
     </Card>
