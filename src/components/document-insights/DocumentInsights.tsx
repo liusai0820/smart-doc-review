@@ -96,6 +96,9 @@ export default function DocumentInsights({ document }: DocumentInsightsProps) {
   const [activeTab, setActiveTab] = useState("summary");
   const [isGenerating, setIsGenerating] = useState(false);
   const [insightData, setInsightData] = useState<FallbackInsightsResult | null>(null);
+  const [isSummaryOpen, setIsSummaryOpen] = useState(true);
+  const [isAnalysisOpen, setIsAnalysisOpen] = useState(true);
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(true);
 
   // 在文档变更时重置洞察数据
   useEffect(() => {

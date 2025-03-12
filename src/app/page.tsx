@@ -266,64 +266,37 @@ export default function Home() {
       </header>
 
       {/* 主内容区 */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
-        <TabsContent value="review" className="flex-1">
-          <div className="flex-1 grid grid-cols-12 min-w-[1280px] p-6 gap-6">
-            {/* 左侧文档列表 */}
-            <div className="col-span-2">
-              <DocumentList 
-                documents={documents} 
-                selectedDocument={selectedDocument}
-                onSelectDocument={handleSelectDocument}
-                onUploadComplete={handleUploadComplete}
-                onDocumentsUpdate={handleDocumentsUpdate}
-              />
-            </div>
+      <div className="flex flex-1">
+        {/* 左侧文档列表 */}
+        <aside className="w-1/4 bg-gray-100 p-4">
+          <DocumentList 
+            documents={documents} 
+            selectedDocument={selectedDocument} 
+            onSelectDocument={setSelectedDocument} 
+            onUploadComplete={handleUploadComplete} 
+            onDocumentsUpdate={setDocuments} 
+          />
+        </aside>
 
-            {/* 中间文档查看器 */}
-            <div className="col-span-7">
-              <Tabs defaultValue="view" className="w-full">
-                <TabsList className="mb-4">
-                  <TabsTrigger value="view">文档视图</TabsTrigger>
-                  <TabsTrigger value="compare">变更对比</TabsTrigger>
-                </TabsList>
-                <TabsContent value="view" className="mt-0">
-                  <DocumentViewer 
-                    document={selectedDocument} 
-                    onReviewComplete={handleReviewComplete}
-                  />
-                </TabsContent>
-                <TabsContent value="compare" className="mt-0">
-                  {selectedDocument && aiReviewedParagraphs ? (
-                    <ChangesComparisonView 
-                      document={selectedDocument}
-                      reviewedParagraphs={aiReviewedParagraphs}
-                      onAcceptChange={handleAcceptChange}
-                      onRejectChange={handleRejectChange}
-                      onClose={() => setActiveTab("review")}
-                    />
-                  ) : (
-                    <Card className="h-full flex items-center justify-center">
-                      <div className="text-center p-6">
-                        <p className="text-gray-500">请先选择文档并完成AI审阅</p>
-                      </div>
-                    </Card>
-                  )}
-                </TabsContent>
-              </Tabs>
+        {/* 中间文档视图 */}
+        <section className="flex-1 p-4">
+          {selectedDocument ? (
+            <DocumentViewer 
+              document={selectedDocument} 
+              onReviewComplete={handleReviewComplete} 
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-gray-500">请选择一个文档进行查看</p>
             </div>
+          )}
+        </section>
 
-            {/* 右侧文档洞察面板 */}
-            <div className="col-span-3">
-              <DocumentInsights document={selectedDocument} />
-            </div>
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="dashboard" className="flex-1 p-6">
-          <ReviewDashboard documents={documents} />
-        </TabsContent>
-      </Tabs>
+        {/* 右侧文档洞察 */}
+        <aside className="w-1/5 bg-gray-50 p-4">
+          {selectedDocument && <DocumentInsights document={selectedDocument} />}
+        </aside>
+      </div>
       
       {/* 弹窗和通知 */}
       <HistoryModal 
