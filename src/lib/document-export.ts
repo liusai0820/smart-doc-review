@@ -72,10 +72,12 @@ function generateDocxContent(
     document.paragraphs.forEach(para => {
       let text = para.text;
       
-      // 应用所有修改
+      // 仅应用已接受的修改
       if (para.changes && para.changes.length > 0) {
+        // 过滤出已接受的变更
+        const acceptedChanges = para.changes.filter(change => change.accepted);
         // 按位置排序变更
-        const sortedChanges = [...para.changes].sort((a, b) => {
+        const sortedChanges = [...acceptedChanges].sort((a, b) => {
           const posA = a.original ? text.indexOf(a.original) : 0;
           const posB = b.original ? text.indexOf(b.original) : 0;
           return posB - posA; // 从后向前应用变更

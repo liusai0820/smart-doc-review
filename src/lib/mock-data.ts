@@ -13,6 +13,7 @@ export interface Change {
   explanation: string;
   severity: ChangeSeverity;
   category?: string;
+  accepted?: boolean;
 }
 
 export interface Paragraph {
